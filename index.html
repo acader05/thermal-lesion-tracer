@@ -1,0 +1,1879 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Thermal Lesion Tracer</title>
+<style>
+  /* ---- design language: clinical, light, navy ---- */
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+  :root{
+    /* brand-neutral palette: clinical navy + cobalt accent */
+    --brand-navy:#293a69;       /* primary navy                 */
+    --brand-navy-dk:#1c294a;    /* darker navy                   */
+    --brand-mid:#45578b;        /* mid blue-grey                 */
+    --brand-soft:#abbad9;       /* light blue-grey               */
+    --brand-blue:#0072ce;       /* bright accent / logo cobalt   */
+    --brand-green:#00d084;      /* positive / success            */
+
+    --bg:#eef1f6;              --panel:#ffffff;        --panel-2:#f4f6fa;
+    --line:#dce1ea;            --ink:#1f2a44;          --ink-dim:#6b7689;
+    --accent:var(--brand-blue);
+    --accent-warm:#e8842b;     --danger:#cf3b3b;
+    --good:var(--brand-green); --shadow:0 6px 24px rgba(41,58,105,.10);
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  html,body{height:100%;}
+  body{
+    background:
+      radial-gradient(1100px 520px at 85% -8%,
+        rgba(41,58,105,.07) 0%, transparent 62%),
+      var(--bg);
+    color:var(--ink);
+    font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif;
+    font-size:13px; line-height:1.5;
+  }
+  h1,h2,.display{font-family:'Inter',sans-serif;font-weight:700;
+    letter-spacing:-.01em;}
+
+  .wrap{max-width:1600px;margin:0 auto;padding:22px 30px 60px;}
+  header{display:flex;align-items:center;gap:13px;
+    padding-bottom:15px;border-bottom:1px solid var(--line);margin-bottom:20px;}
+  header h1{font-size:21px;letter-spacing:-.02em;color:var(--brand-navy);}
+  header .sub{color:var(--ink-dim);font-size:12px;font-weight:500;}
+  /* Swift bolt logo mark */
+  .brand-logo{width:34px;height:34px;flex:none;}
+  .brand-text{display:flex;flex-direction:column;gap:1px;}
+  .brand-text .product{font-size:10px;font-weight:600;letter-spacing:.14em;
+    text-transform:uppercase;color:var(--brand-blue);}
+  .tag{margin-left:auto;font-size:11px;color:var(--brand-navy);font-weight:600;
+    background:var(--panel);border:1px solid var(--line);
+    border-radius:20px;padding:5px 13px;}
+
+  /* settings on the left, image preview on the right (sticky) */
+  .layout{display:grid;grid-template-columns:minmax(460px,540px) 1fr;
+    gap:22px;align-items:start;}
+  .settings-col{min-width:0;}
+  .preview-col{position:sticky;top:16px;align-self:start;min-width:0;}
+  @media(max-width:1100px){
+    .layout{grid-template-columns:1fr;}
+    .preview-col{position:static;order:-1;}
+  }
+
+  /* ---- Case Summary bar (sits above the image preview) ---- */
+  .case-summary{display:flex;gap:1px;background:var(--line);
+    border:1px solid var(--line);border-radius:12px;overflow:hidden;
+    margin-bottom:14px;box-shadow:var(--shadow);
+    border-top:3px solid var(--brand-navy);}
+  .cs-cell{background:var(--panel);padding:10px 14px;flex:1;
+    display:flex;flex-direction:column;justify-content:center;gap:3px;}
+  .cs-k{font-size:10px;color:var(--ink-dim);text-transform:uppercase;
+    letter-spacing:.6px;}
+  .cs-v{font-weight:700;font-size:21px;line-height:1;color:var(--brand-navy);}
+  .cs-v.warm{color:var(--accent-warm);}
+  .cs-toggle{display:flex;align-items:center;gap:6px;font-size:11px;
+    color:var(--ink-dim);cursor:pointer;}
+  .cs-toggle input{accent-color:var(--accent);cursor:pointer;}
+  @media(max-width:760px){.case-summary{flex-wrap:wrap;}
+    .cs-cell{min-width:46%;}}
+
+  .panel{background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:16px;box-shadow:var(--shadow);}
+  .panel + .panel{margin-top:16px;}
+  .panel h2{font-size:14px;margin-bottom:4px;}
+  .panel .hint{color:var(--ink-dim);font-size:11px;margin-bottom:12px;}
+
+  /* ---- canvas / image stage (kept dark: thermal color reads best) ---- */
+  #stageWrap{position:relative;background:#0e1419;
+    border:1px solid var(--line);border-radius:10px;overflow:hidden;
+    min-height:300px;display:flex;align-items:center;justify-content:center;}
+  #stage{display:block;max-width:100%;cursor:crosshair;}
+  #empty{color:#8da0b0;text-align:center;padding:60px 20px;font-size:12px;}
+  #empty b{color:#e8eef3;font-weight:700;font-size:16px;
+    display:block;margin-bottom:6px;}
+
+  /* ---- the live draggable temperature scale ---- */
+  .scale-block{margin-top:10px;}
+  .scale-readout{display:flex;justify-content:space-between;align-items:baseline;
+    margin-bottom:5px;}
+  .scale-readout .big{font-weight:700;font-size:18px;
+    color:var(--brand-navy);}
+  .scale-readout .lbl{color:var(--ink-dim);font-size:11px;}
+  #scaleBar{position:relative;height:30px;border-radius:7px;
+    border:1px solid var(--line);overflow:visible;cursor:ew-resize;
+    user-select:none;touch-action:none;}
+  #scaleGrad{position:absolute;inset:0;border-radius:6px;}
+  /* shaded "rejected" overlay below threshold */
+  #scaleMask{position:absolute;top:0;bottom:0;left:0;border-radius:6px 0 0 6px;
+    background:rgba(255,255,255,.66);border-right:2px solid var(--brand-navy);
+    backdrop-filter:grayscale(1);}
+  #scaleHandle{position:absolute;top:-6px;bottom:-6px;width:12px;
+    margin-left:-6px;border-radius:4px;background:var(--brand-navy);
+    cursor:ew-resize;box-shadow:0 2px 8px rgba(41,58,105,.4);
+    border:1px solid var(--brand-navy-dk);}
+  #scaleHandle::after{content:"";position:absolute;left:4px;right:4px;
+    top:50%;height:10px;transform:translateY(-50%);
+    border-left:1px solid rgba(255,255,255,.7);
+    border-right:1px solid rgba(255,255,255,.7);}
+  .scale-ticks{position:relative;height:15px;margin-top:2px;
+    color:var(--ink-dim);font-size:10px;}
+  .scale-ticks span{position:absolute;transform:translateX(-50%);}
+
+  .row{display:flex;gap:8px;align-items:center;margin:9px 0;flex-wrap:wrap;}
+  label{color:var(--ink-dim);font-size:11px;}
+  input[type=number],input[type=text]{background:var(--panel);
+    border:1px solid var(--line);color:var(--ink);border-radius:6px;
+    padding:6px 8px;font-family:inherit;font-size:12px;width:78px;}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  button{font-family:inherit;font-size:12px;font-weight:500;cursor:pointer;
+    background:var(--panel);color:var(--ink);border:1px solid var(--line);
+    border-radius:7px;padding:8px 12px;transition:.15s;}
+  button:hover{border-color:var(--accent);color:var(--accent);}
+  button.primary{background:var(--brand-navy);color:#fff;
+    border-color:var(--brand-navy);font-weight:600;}
+  button.primary:hover{background:var(--brand-navy-dk);color:#fff;
+    border-color:var(--brand-navy-dk);}
+  button.warm{border-color:var(--accent-warm);color:var(--accent-warm);}
+  button.danger{border-color:var(--danger);color:var(--danger);}
+  button.danger:hover{background:var(--danger);color:#fff;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.active{background:var(--brand-blue);color:#fff;
+    border-color:var(--brand-blue);}
+
+  .seg{display:flex;border:1px solid var(--line);border-radius:7px;overflow:hidden;}
+  .seg button{border:0;border-radius:0;flex:1;}
+  .seg button + button{border-left:1px solid var(--line);}
+
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;}
+  .stat{background:var(--panel-2);border:1px solid var(--line);
+    border-radius:8px;padding:8px 10px;}
+  .stat .k{color:var(--ink-dim);font-size:10px;text-transform:uppercase;
+    letter-spacing:.5px;}
+  .stat .v{font-weight:700;font-size:18px;margin-top:2px;color:var(--brand-navy);}
+
+  .roi-list{margin-top:8px;max-height:300px;overflow-y:auto;}
+  .roi-item{display:flex;align-items:center;gap:8px;padding:7px 9px;
+    background:var(--panel-2);border:1px solid var(--line);border-radius:7px;
+    margin-bottom:6px;font-size:11px;cursor:pointer;transition:.12s;}
+  .roi-item:hover{border-color:var(--ink-dim);}
+  .roi-item.selected{border-color:var(--accent);
+    background:#eaf3fb;box-shadow:0 0 0 1px var(--accent) inset;}
+  .roi-item .dot{width:12px;height:12px;border-radius:3px;flex:none;
+    border:1px solid rgba(255,255,255,.35);}
+  .roi-item .grow{flex:1;}
+  .roi-item button{padding:3px 7px;font-size:10px;}
+  .roi-num{font-weight:700;font-size:15px;width:18px;color:var(--brand-navy);
+    text-align:center;flex:none;}
+  .roi-nav{display:flex;align-items:center;gap:8px;margin:8px 0 4px;}
+  .roi-nav button{padding:6px 10px;}
+  .roi-nav .count{flex:1;text-align:center;color:var(--ink-dim);font-size:11px;}
+
+  /* per-ROI appearance controls */
+  .style-box{margin-top:10px;padding:10px;border:1px solid var(--line);
+    border-radius:8px;background:var(--panel-2);}
+  .style-title{font-size:11px;color:var(--accent);margin-bottom:6px;
+    text-transform:uppercase;letter-spacing:.5px;}
+  .style-box .mini{font-size:11px;color:var(--ink-dim);width:26px;}
+  input[type=color]{width:34px;height:26px;padding:0;border:1px solid var(--line);
+    border-radius:6px;background:var(--panel-2);cursor:pointer;}
+  .style-box input[type=range]{flex:1;}
+
+  .step-num{display:inline-flex;width:18px;height:18px;border-radius:5px;
+    background:var(--brand-navy);color:#fff;font-size:11px;font-weight:600;
+    align-items:center;justify-content:center;margin-right:6px;}
+  .note{font-size:10px;color:var(--ink-dim);margin-top:8px;line-height:1.6;}
+  .divider{height:1px;background:var(--line);margin:14px 0;}
+  .toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+    background:var(--panel);border:1px solid var(--accent);color:var(--ink);
+    padding:10px 18px;border-radius:8px;font-size:12px;box-shadow:var(--shadow);
+    opacity:0;transition:.25s;pointer-events:none;}
+  .toast.show{opacity:1;}
+  .filebtn{position:relative;overflow:hidden;}
+  .filebtn input{position:absolute;inset:0;opacity:0;cursor:pointer;}
+
+  .app-footer{margin-top:34px;padding-top:16px;text-align:center;
+    border-top:1px solid var(--line);color:var(--ink-dim);font-size:11px;}
+  .app-footer strong{color:var(--brand-navy);font-weight:700;}
+
+  /* native select, themed to match inputs */
+  select{background:var(--panel);border:1px solid var(--line);color:var(--ink);
+    border-radius:6px;padding:6px 8px;font-family:inherit;font-size:12px;
+    cursor:pointer;}
+  select:focus{outline:none;border-color:var(--accent);}
+
+  /* ---- toolbar directly above the image (modes + calibration) ---- */
+  .img-toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+    padding:9px 11px;margin-top:12px;background:var(--panel-2);
+    border:1px solid var(--line);border-bottom:0;border-radius:10px 10px 0 0;}
+  .img-toolbar .seg{flex:none;}
+  .img-toolbar .seg button{padding:6px 10px;}
+  .img-toolbar .tb-cal{display:flex;align-items:center;gap:6px;font-size:11px;
+    color:var(--ink-dim);}
+  .img-toolbar .tb-cal input[type=number]{width:56px;}
+  .img-toolbar .tb-scale{font-weight:600;color:var(--brand-navy);
+    background:var(--panel);border:1px solid var(--line);border-radius:6px;
+    padding:5px 9px;font-size:11px;}
+  .img-toolbar .spacer{flex:1;}
+  #stageWrap.has-toolbar{border-radius:0 0 10px 10px;margin-top:0;}
+
+  /* ---- palette editor ---- */
+  .sub-head{font-size:13px;font-weight:700;color:var(--brand-navy);
+    display:flex;align-items:center;margin:2px 0 4px;}
+  .pal-preview{height:24px;border-radius:7px;border:1px solid var(--line);
+    margin:8px 0;}
+  .pal-stops{display:flex;flex-wrap:wrap;gap:6px;margin-top:4px;}
+  .swatch{width:26px;height:26px;border-radius:50%;border:2px solid #fff;
+    box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0;flex:none;}
+  .swatch:hover{box-shadow:0 0 0 2px var(--accent);}
+  .swatch.lg{width:30px;height:30px;}
+  /* lightweight color picker popover (swatches + HSV wheel, no native picker) */
+  .color-pop{position:fixed;z-index:1000;background:var(--panel);
+    border:1px solid var(--line);border-radius:12px;padding:12px;width:178px;
+    box-shadow:0 12px 44px rgba(20,30,60,.24);}
+  .cp-swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;
+    margin-bottom:10px;}
+  .cp-swatches .swatch{width:100%;height:0;padding-bottom:100%;border-width:2px;}
+  .cp-custom{display:flex;flex-direction:column;align-items:center;gap:9px;}
+  #cpWheel{cursor:crosshair;border-radius:50%;}
+  .cp-light{width:100%;}
+  .cp-foot{display:flex;align-items:center;gap:8px;margin-top:10px;}
+  .cp-preview{width:24px;height:24px;border-radius:6px;border:1px solid var(--line);
+    flex:none;}
+  .cp-hex{font-size:12px;font-family:ui-monospace,Menlo,monospace;
+    color:var(--ink-dim);flex:1;}
+  .cp-foot button{padding:6px 12px;}
+  .pal-tag{margin-left:auto;font-size:10px;font-weight:600;padding:2px 8px;
+    border-radius:20px;background:var(--panel-2);border:1px solid var(--line);
+    color:var(--ink-dim);}
+  .pal-tag.custom{color:var(--accent);border-color:var(--accent);}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <!-- brand-neutral mark: a thermal gradient disc with a target reticle -->
+    <svg class="brand-logo" viewBox="0 0 100 100"
+         xmlns="http://www.w3.org/2000/svg" aria-label="Thermal Lesion Tracer">
+      <defs>
+        <linearGradient id="logoGrad" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0" stop-color="#0043ff"/>
+          <stop offset="0.45" stop-color="#15f2ef"/>
+          <stop offset="0.7" stop-color="#e7ff22"/>
+          <stop offset="1" stop-color="#fa1a09"/>
+        </linearGradient>
+      </defs>
+      <circle cx="50" cy="50" r="50" fill="var(--brand-navy)"/>
+      <circle cx="50" cy="50" r="34" fill="none"
+              stroke="url(#logoGrad)" stroke-width="11"/>
+      <circle cx="50" cy="50" r="6" fill="#ffffff"/>
+      <path d="M50 6 V20 M50 80 V94 M6 50 H20 M80 50 H94"
+            stroke="#ffffff" stroke-width="5" stroke-linecap="round"/>
+    </svg>
+    <div class="brand-text">
+      <span class="product">Open Clinical Imaging</span>
+      <h1>Thermal Lesion Tracer</h1>
+    </div>
+    <span class="tag">Open-source imaging tool</span>
+  </header>
+
+  <div class="layout">
+    <!-- ============ LEFT: all settings ============ -->
+    <div class="settings-col">
+
+      <!-- ===== modality + live scale + palette (same area) ===== -->
+      <div class="panel">
+        <h2><span class="step-num">1</span>Modality, threshold &amp; palette</h2>
+        <div class="row">
+          <label>Modality</label>
+          <select id="modality" style="flex:1;min-width:160px;">
+            <option value="tempC">Temperature (&deg;C)</option>
+            <option value="tempF">Temperature (&deg;F)</option>
+            <option value="biolum">Bioluminescence (p/s/cm&sup2;/sr)</option>
+            <option value="fluor">Fluorescence (a.u.)</option>
+            <option value="perfusion">Perfusion (PU)</option>
+            <option value="ph">pH</option>
+            <option value="oxy">Oxygenation (%StO&#8322;)</option>
+            <option value="generic">Generic intensity (a.u.)</option>
+            <option value="custom">Custom&hellip;</option>
+          </select>
+        </div>
+        <div class="row" id="customRow" style="display:none;">
+          <label>Name</label>
+          <input type="text" id="customName" placeholder="Quantity" style="width:96px;">
+          <label>Unit</label>
+          <input type="text" id="customUnit" placeholder="a.u." style="width:66px;">
+        </div>
+        <div class="hint">Drag the white handle left/right. Everything at or
+          above the handle value is highlighted on the image, live.</div>
+
+        <div class="scale-block">
+          <div class="scale-readout">
+            <span class="lbl">outlining regions &ge;</span>
+            <span class="big"><span id="thrVal">1.5</span>
+              <span id="thrUnit">&deg;C</span></span>
+          </div>
+          <div id="scaleBar">
+            <div id="scaleGrad"></div>
+            <div id="scaleMask"></div>
+            <div id="scaleHandle"></div>
+          </div>
+          <div class="scale-ticks" id="scaleTicks"></div>
+        </div>
+
+        <div class="row" style="margin-top:14px;">
+          <label>Range</label>
+          <input type="number" id="tMin" value="-5" step="0.5"> to
+          <input type="number" id="tMax" value="5" step="0.5">
+          <span id="rangeUnit">&deg;C</span>
+          <button id="reverseBtn">Reverse</button>
+        </div>
+        <div class="row">
+          <label>Smoothing</label>
+          <input type="range" id="smoothR" min="0" max="6" step="0.5" value="2">
+          <span id="smoothV" class="note" style="margin:0;width:24px;">2</span>
+          <label>Min size px</label>
+          <input type="number" id="minSize" value="120" step="10">
+        </div>
+        <div class="note">Smoothing rounds the outlines (natural wounds are not
+          jagged) and suppresses small thermal speckle artifacts.</div>
+
+        <!-- palette editor lives right beside the scale it controls -->
+        <div class="divider"></div>
+        <div class="sub-head">Colour palette
+          <span class="pal-tag" id="palTag">Swift</span></div>
+        <div class="hint">Swift is the default scale. Pick another preset, or edit
+          2&ndash;12 stops (tap a circle) and <b>Apply</b>.</div>
+        <div class="row">
+          <label>Preset</label>
+          <select id="palettePreset" style="flex:1;">
+            <option value="swift">Swift (lab thermal scale)</option>
+            <option value="jet">Jet</option>
+            <option value="iron">Iron</option>
+            <option value="inferno">Inferno</option>
+            <option value="viridis">Viridis</option>
+            <option value="grayscale">Grayscale</option>
+          </select>
+        </div>
+        <div class="pal-stops" id="paletteStops"></div>
+        <div class="row" style="margin-top:8px;">
+          <button id="addStop">+ Stop</button>
+          <button id="removeStop">&minus; Stop</button>
+        </div>
+        <div class="pal-preview" id="palettePreview"></div>
+        <div class="row">
+          <button id="applyPalette" class="primary" style="flex:1;">
+            Apply palette</button>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2><span class="step-num">2</span>Detected regions</h2>
+        <div class="hint">Auto-traced from the current threshold. Keep the
+          real lesions, drop the artifacts.</div>
+        <div class="row">
+          <button id="detectBtn" class="primary" style="flex:1;">
+            Detect at current threshold</button>
+        </div>
+        <div id="candArea"></div>
+      </div>
+
+      <div class="panel">
+        <h2><span class="step-num">3</span>ROI list</h2>
+        <div class="hint">Click a row to highlight that lesion on the image.
+          Step through with the arrows.</div>
+        <div class="roi-nav">
+          <button id="roiPrev">&larr; Prev</button>
+          <span class="count" id="roiCount">No ROIs</span>
+          <button id="roiNext">Next &rarr;</button>
+        </div>
+        <label class="cs-toggle" style="margin:2px 0 6px;">
+          <input type="checkbox" id="showNums" checked> Show lesion numbers on image
+        </label>
+        <div id="roiList" class="roi-list">
+          <div class="note">No ROIs yet.</div>
+        </div>
+
+        <!-- per-ROI appearance controls (for the selected lesion) -->
+        <div id="styleBox" class="style-box" style="display:none;">
+          <div class="style-title">Appearance &mdash; Lesion
+            <span id="styleNum">1</span></div>
+          <div class="row">
+            <label>Stroke</label>
+            <button type="button" id="styleColor" class="swatch lg"
+                    style="background:#5fbf7d"></button>
+            <label>Width</label>
+            <input type="range" id="styleWidth" min="1" max="8"
+                   step="0.5" value="2.4">
+            <span id="styleWidthV" class="mini">2.4</span>
+          </div>
+          <div class="row">
+            <label>Fill</label>
+            <div class="seg" style="flex:1;">
+              <button id="fillNone" class="active">None</button>
+              <button id="fillLight">Light</button>
+              <button id="fillMed">Medium</button>
+              <button id="fillSolid">Solid</button>
+            </div>
+          </div>
+          <div class="row">
+            <button id="applyAll" style="flex:1;">Apply this style to all</button>
+          </div>
+        </div>
+
+        <div class="divider"></div>
+        <div class="row">
+          <button id="exportImg" style="flex:1;">Overlay PNG</button>
+          <button id="exportCsv" style="flex:1;">Measurements CSV</button>
+        </div>
+        <div class="row">
+          <button id="exportZip" class="primary" style="flex:1;">
+            ImageJ RoiSet.zip</button>
+          <button id="clearBtn" class="danger">Clear all</button>
+        </div>
+        <div class="note">RoiSet.zip opens directly in ImageJ:
+          ROI&nbsp;Manager &rarr; More &rarr; Open. Each lesion is a
+          standard <b>.roi</b> polygon inside the zip.</div>
+      </div>
+    </div>
+
+    <!-- ============ RIGHT: summary + image preview (sticky) ============ -->
+    <div class="preview-col">
+      <div class="case-summary" id="caseSummary">
+        <div class="cs-cell">
+          <div class="cs-k">Lesions</div>
+          <div class="cs-v" id="csCount">0</div>
+        </div>
+        <div class="cs-cell">
+          <div class="cs-k" id="csDeltaLabel">&Delta; max</div>
+          <div class="cs-v warm" id="csDeltaMax">&mdash;</div>
+        </div>
+        <div class="cs-cell">
+          <div class="cs-k">Total area</div>
+          <div class="cs-v" id="csTotalArea">&mdash;</div>
+        </div>
+        <div class="cs-cell">
+          <div class="cs-k">Total perimeter</div>
+          <div class="cs-v" id="csTotalPerim">&mdash;</div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <h2><span class="step-num">&#9656;</span>Image preview</h2>
+        <div class="hint">Load a false-color image with an embedded colorbar.</div>
+        <div class="row">
+          <button class="filebtn primary">Load image
+            <input type="file" id="fileIn" accept="image/*">
+          </button>
+          <button id="newFileBtn" class="danger">New file</button>
+          <span id="fileName" class="note" style="margin:0;"></span>
+        </div>
+
+        <!-- toolbar directly above the image: mode + calibration -->
+        <div class="img-toolbar">
+          <div class="seg">
+            <button id="modeView" class="active">View</button>
+            <button id="modeCal">Calibrate</button>
+            <button id="modeDraw">Draw lesion</button>
+          </div>
+          <div class="tb-cal">
+            <label>Sticker &Oslash;</label>
+            <input type="number" id="calMM" value="10" step="0.5"> mm
+          </div>
+          <span class="spacer"></span>
+          <span class="tb-scale"><span id="pxPerMM">&mdash;</span> px/mm</span>
+        </div>
+
+        <div id="stageWrap" class="has-toolbar">
+          <div id="empty"><b>No image loaded</b>
+            Load a thermal image to begin tracing.</div>
+          <canvas id="stage" style="display:none;"></canvas>
+        </div>
+
+        <div id="modeHelp" class="note" style="margin-top:8px;">
+          View mode: pan/inspect. Use the toolbar to calibrate scale or hand-draw.
+        </div>
+        <div id="calNote" class="note" style="margin-top:2px;">
+          No calibration set &mdash; areas will be reported in pixels only.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="app-footer">
+    Thermal Lesion Tracer &middot; Open-source clinical imaging tool &middot;
+    Created by <strong>Atif Cader</strong>
+  </footer>
+</div>
+
+<!-- lightweight color picker (swatches + HSV wheel; no OS picker / dropper) -->
+<div id="colorPop" class="color-pop" style="display:none;">
+  <div class="cp-swatches" id="cpSwatches"></div>
+  <div class="cp-custom">
+    <canvas id="cpWheel" width="150" height="150"></canvas>
+    <input type="range" id="cpLight" min="0" max="100" value="55" class="cp-light"
+           title="Brightness">
+  </div>
+  <div class="cp-foot">
+    <span class="cp-preview" id="cpPreview"></span>
+    <span class="cp-hex" id="cpHex">#000000</span>
+    <button id="cpDone" class="primary">Done</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+"use strict";
+/* =====================================================================
+   Thermal Lesion Tracer
+   Pipeline: colorbar decode -> temperature map -> live threshold ->
+   region tracing -> spline smoothing -> measurement -> ImageJ export.
+   ===================================================================== */
+
+const $ = id => document.getElementById(id);
+const toast = (msg)=>{const t=$("toast");t.textContent=msg;t.classList.add("show");
+  clearTimeout(t._t);t._t=setTimeout(()=>t.classList.remove("show"),2200);};
+
+/* ---------- global state ---------- */
+const S = {
+  img:null,                 // HTMLImageElement
+  iw:0, ih:0,               // natural image size
+  view:{x:0,y:0,scale:1},   // canvas display transform
+  lut:null,                 // [{r,g,b}] cold->hot, sampled from colorbar
+  tMin:-5, tMax:5,
+  tempMap:null,             // Float32Array iw*ih  (temperature per pixel)
+  validMask:null,           // Uint8 iw*ih (1 = on the colormap)
+  barBox:null,              // {x0,y0,x1,y1} detected colorbar
+  threshold:1.5,
+  mode:"view",
+  calPts:[],                // calibration click points (image coords)
+  pxPerMM:0,
+  drawPts:[],               // in-progress hand-drawn polygon (image coords)
+  candidates:[],            // [{pts:[[x,y]...]}] auto-detected
+  rois:[],                  // accepted [{pts, color}]
+  selROI:-1,                // index of the currently selected/highlighted ROI
+  _hoverCand:-1,            // candidate row being hovered (preview flash)
+  showNums:true,            // draw lesion number labels on the image
+  modality:"tempC",         // active modality key (see MODALITIES)
+  paletteStops:null,        // current editor hex stops (null until init)
+  hiCanvas:null,            // offscreen highlight layer
+};
+
+/* =====================================================================
+   MODALITIES  -- each defines unit, value range, default threshold,
+   whether it uses delta semantics (Δ max vs Peak max), and a suggested
+   preset palette. Thermal °C is the default (axilla workflow unchanged).
+   ===================================================================== */
+const MODALITIES = {
+  tempC:    {name:"Temperature (°C)", unit:"°C",        delta:true,
+             min:-5, max:5,  thr:1.5, preset:"swift"},
+  tempF:    {name:"Temperature (°F)", unit:"°F",        delta:true,
+             min:-9, max:9,  thr:2.7, preset:"swift"},
+  biolum:   {name:"Bioluminescence",  unit:"p/s/cm²/sr",delta:false,
+             min:0,  max:100,thr:50,  preset:"inferno"},
+  fluor:    {name:"Fluorescence",     unit:"a.u.",      delta:false,
+             min:0,  max:100,thr:50,  preset:"viridis"},
+  perfusion:{name:"Perfusion",        unit:"PU",        delta:false,
+             min:0,  max:100,thr:50,  preset:"jet"},
+  ph:       {name:"pH",               unit:"",          delta:false,
+             min:0,  max:14, thr:7,   preset:"viridis"},
+  oxy:      {name:"Oxygenation",      unit:"%StO₂",     delta:false,
+             min:0,  max:100,thr:60,  preset:"jet"},
+  generic:  {name:"Generic intensity",unit:"a.u.",      delta:false,
+             min:0,  max:100,thr:50,  preset:"grayscale"},
+  custom:   {name:"Custom",           unit:"a.u.",      delta:false,
+             min:0,  max:100,thr:50,  preset:"jet"},
+};
+function curMod(){return MODALITIES[S.modality]||MODALITIES.tempC;}
+// current unit string, honouring the Custom unit input
+function curUnit(){
+  if(S.modality==="custom"){
+    const u=($("customUnit").value||"").trim();
+    return u;
+  }
+  return curMod().unit;
+}
+// space-prefixed unit suffix for inline readouts (empty if no unit)
+function uSuffix(){const u=curUnit();return u?" "+u:"";}
+
+/* ---- preset palettes: cold -> hot hex stops ---- */
+const PRESETS = {
+  jet:      ["#00007f","#0000ff","#00ffff","#ffff00","#ff0000","#7f0000"],
+  // "Swift" = the lab's thermal scale, sampled from the reference colorbar.
+  // 11 stops = one per degree from -5 to +5 (stops are evenly spaced).
+  swift:    ["#00028b","#0003f6","#005aff","#00baff","#36ffce","#84ff81",
+             "#d2ff35","#ffc90f","#ff6f07","#f41805","#870000"],
+  iron:     ["#000000","#4b0082","#8b0000","#ff4500","#ffa500","#ffff00","#ffffff"],
+  inferno:  ["#000004","#420a68","#932667","#dd513a","#fca50a","#fcffa4"],
+  viridis:  ["#440154","#3b528b","#21918c","#5ec962","#fde725"],
+  grayscale:["#000000","#ffffff"],
+};
+const MAX_STOPS = 12;
+
+const ROI_COLORS = ["#5fbf7d","#f0a23c","#46c6b8","#e2624b","#c98bdb",
+                    "#7db4e8","#e8c84a","#6fd0c0"];
+
+/* a ROI carries its own display style: stroke color, stroke width,
+   and fill opacity (0 = no fill). */
+function makeROI(pts){
+  return {
+    pts,
+    color: ROI_COLORS[S.rois.length % ROI_COLORS.length],
+    strokeW: 2.4,
+    fill: 0            // default: outline only, no fill
+  };
+}
+
+/* =====================================================================
+   1. COLORBAR DETECTION  -- find the strip whose hue genuinely sweeps
+   ===================================================================== */
+function rgb2hue(r,g,b){
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;
+  if(d===0)return 0;
+  let h;
+  if(mx===r)      h=((g-b)/d)%6;
+  else if(mx===g) h=(b-r)/d+2;
+  else            h=(r-g)/d+4;
+  h*=60; if(h<0)h+=360;
+  return h;
+}
+function sat(r,g,b){const mx=Math.max(r,g,b);return mx===0?0:(mx-Math.min(r,g,b))/mx;}
+
+function detectColorbar(data,w,h){
+  // scan rows in the lower 45% for a wide strip whose hue spans a real
+  // gradient (blue..red). Vivid-but-flat bands of image content are rejected.
+  let best=null;
+  const rowSweeps=(y)=>{
+    let vivid=0,hues=[];
+    for(let x=0;x<w;x++){
+      const i=(y*w+x)*4,r=data[i],g=data[i+1],b=data[i+2];
+      const mx=Math.max(r,g,b);
+      if(sat(r,g,b)>0.35 && mx>90){vivid++;hues.push(rgb2hue(r,g,b));}
+    }
+    if(vivid < w*0.5) return false;
+    let mn=361,mx=-1;
+    for(const hh of hues){if(hh<mn)mn=hh;if(hh>mx)mx=hh;}
+    const spread=mx-mn;
+    const n=hues.length;
+    const left=hues.slice(0,20).reduce((a,c)=>a+c,0)/Math.min(20,n);
+    const right=hues.slice(-20).reduce((a,c)=>a+c,0)/Math.min(20,n);
+    return spread>180 && Math.abs(left-right)>120;
+  };
+  const rows=[];
+  for(let y=Math.floor(h*0.55);y<h;y++) if(rowSweeps(y)) rows.push(y);
+  if(rows.length<4) return null;
+  // longest contiguous run
+  let runs=[],cur=[rows[0]];
+  for(let k=1;k<rows.length;k++){
+    if(rows[k]-cur[cur.length-1]<=3)cur.push(rows[k]);
+    else{runs.push(cur);cur=[rows[k]];}
+  }
+  runs.push(cur);
+  const run=runs.reduce((a,b)=>b.length>a.length?b:a);
+  const y0=run[0],y1=run[run.length-1],ymid=(y0+y1)>>1;
+  // x-extent of vivid pixels on the mid row
+  let x0=w,x1=0;
+  for(let x=0;x<w;x++){
+    const i=(ymid*w+x)*4;
+    if(sat(data[i],data[i+1],data[i+2])>0.35 &&
+       Math.max(data[i],data[i+1],data[i+2])>90){
+      if(x<x0)x0=x; if(x>x1)x1=x;
+    }
+  }
+  return {x0,y0,x1,y1};
+}
+
+function sampleColorbar(data,w,box,n=256){
+  // average the strip vertically, resample to n ordered colors
+  const {x0,y0,x1,y1}=box, bw=x1-x0;
+  const lut=[];
+  for(let k=0;k<n;k++){
+    const x=x0+Math.round(k/(n-1)*(bw-1));
+    let r=0,g=0,b=0,c=0;
+    for(let y=y0;y<=y1;y++){
+      const i=(y*w+x)*4;r+=data[i];g+=data[i+1];b+=data[i+2];c++;
+    }
+    lut.push({r:r/c,g:g/c,b:b/c});
+  }
+  // orient cold->hot: cold end should be blue-ish (b>r)
+  if(lut[0].b < lut[lut.length-1].b) lut.reverse();
+  return lut;
+}
+
+/* =====================================================================
+   2. TEMPERATURE MAP  -- nearest colorbar color for every pixel
+   ===================================================================== */
+function buildTempMap(){
+  const {iw,ih,lut,tMin,tMax}=S;
+  const off=document.createElement("canvas");
+  off.width=iw;off.height=ih;
+  const ctx=off.getContext("2d",{willReadFrequently:true});
+  ctx.drawImage(S.img,0,0);
+  const data=ctx.getImageData(0,0,iw,ih).data;
+
+  const temp=new Float32Array(iw*ih);
+  const valid=new Uint8Array(iw*ih);
+  const n=lut.length;
+  const lr=new Float32Array(n),lg=new Float32Array(n),lb=new Float32Array(n);
+  for(let k=0;k<n;k++){lr[k]=lut[k].r;lg[k]=lut[k].g;lb[k]=lut[k].b;}
+
+  for(let p=0;p<iw*ih;p++){
+    const i=p*4,r=data[i],g=data[i+1],b=data[i+2];
+    let bd=1e9,bi=0;
+    for(let k=0;k<n;k++){
+      const dr=r-lr[k],dg=g-lg[k],db=b-lb[k];
+      const d=dr*dr+dg*dg+db*db;
+      if(d<bd){bd=d;bi=k;}
+    }
+    temp[p]=tMin+(bi/(n-1))*(tMax-tMin);
+    valid[p]=(bd<=60*60)?1:0;            // far from colormap -> reject
+  }
+  // exclude the colorbar strip itself
+  if(S.barBox){
+    const {x0,y0,x1,y1}=S.barBox;
+    for(let y=Math.max(0,y0-8);y<=Math.min(ih-1,y1+4);y++)
+      for(let x=x0;x<=x1;x++) valid[y*iw+x]=0;
+  }
+  S.tempMap=temp;S.validMask=valid;
+}
+
+/* =====================================================================
+   3. LIVE HIGHLIGHT  -- recolor pixels >= threshold (runs as you drag)
+   ===================================================================== */
+function buildHighlight(){
+  const {iw,ih,tempMap,validMask,threshold}=S;
+  if(!tempMap)return;
+  if(!S.hiCanvas){
+    S.hiCanvas=document.createElement("canvas");
+    S.hiCanvas.width=iw;S.hiCanvas.height=ih;
+  }
+  const ctx=S.hiCanvas.getContext("2d");
+  const img=ctx.createImageData(iw,ih);
+  const d=img.data;
+  for(let p=0;p<iw*ih;p++){
+    if(validMask[p] && tempMap[p]>=threshold){
+      const i=p*4;
+      d[i]=255;d[i+1]=255;d[i+2]=255;d[i+3]=110;   // soft white wash
+    }
+  }
+  ctx.putImageData(img,0,0);
+  render();
+}
+
+/* =====================================================================
+   4. REGION DETECTION + CONTOUR TRACING
+   ===================================================================== */
+function gaussianBlurMask(src,w,h,sigma){
+  // separable box-blur approximation of a gaussian on a float mask
+  if(sigma<=0)return src.slice();
+  const r=Math.max(1,Math.round(sigma));
+  const tmp=new Float32Array(w*h),out=new Float32Array(w*h);
+  const win=2*r+1;
+  for(let y=0;y<h;y++){
+    let acc=0;
+    for(let x=-r;x<=r;x++)acc+=src[y*w+Math.min(w-1,Math.max(0,x))];
+    for(let x=0;x<w;x++){
+      tmp[y*w+x]=acc/win;
+      const add=src[y*w+Math.min(w-1,x+r+1>w-1?w-1:x+r+1)];
+      const sub=src[y*w+Math.max(0,x-r)];
+      acc+=add-sub;
+    }
+  }
+  for(let x=0;x<w;x++){
+    let acc=0;
+    for(let y=-r;y<=r;y++)acc+=tmp[Math.min(h-1,Math.max(0,y))*w+x];
+    for(let y=0;y<h;y++){
+      out[y*w+x]=acc/win;
+      const add=tmp[Math.min(h-1,y+r+1>h-1?h-1:y+r+1)*w+x];
+      const sub=tmp[Math.max(0,y-r)*w+x];
+      acc+=add-sub;
+    }
+  }
+  return out;
+}
+
+function detectRegions(){
+  const {iw,ih,tempMap,validMask,threshold}=S;
+  const sigma=parseFloat($("smoothR").value);
+  const minSize=parseInt($("minSize").value)||0;
+
+  // float mask 1.0 where (>=threshold & valid), blurred to kill speckle
+  const m=new Float32Array(iw*ih);
+  for(let p=0;p<iw*ih;p++)
+    m[p]=(validMask[p]&&tempMap[p]>=threshold)?1:0;
+  const blurred=gaussianBlurMask(m,iw,ih,sigma);
+  const bin=new Uint8Array(iw*ih);
+  for(let p=0;p<iw*ih;p++)bin[p]=blurred[p]>=0.5?1:0;
+
+  // connected components (4-conn flood fill)
+  const labels=new Int32Array(iw*ih).fill(0);
+  let next=1;const sizes=[0];
+  const stack=[];
+  for(let p=0;p<iw*ih;p++){
+    if(bin[p]&&labels[p]===0){
+      let sz=0;stack.length=0;stack.push(p);labels[p]=next;
+      while(stack.length){
+        const q=stack.pop();sz++;
+        const x=q%iw,y=(q/iw)|0;
+        if(x>0   &&bin[q-1] &&!labels[q-1]) {labels[q-1]=next;stack.push(q-1);}
+        if(x<iw-1&&bin[q+1] &&!labels[q+1]) {labels[q+1]=next;stack.push(q+1);}
+        if(y>0   &&bin[q-iw]&&!labels[q-iw]){labels[q-iw]=next;stack.push(q-iw);}
+        if(y<ih-1&&bin[q+iw]&&!labels[q+iw]){labels[q+iw]=next;stack.push(q+iw);}
+      }
+      sizes.push(sz);next++;
+    }
+  }
+  const cands=[];
+  for(let lab=1;lab<next;lab++){
+    if(sizes[lab]<minSize)continue;
+    const c=traceContour(labels,iw,ih,lab);
+    if(c&&c.length>=8) cands.push({pts:smoothSpline(c,sigma)});
+  }
+  return cands;
+}
+
+function traceContour(labels,w,h,lab){
+  // Moore boundary tracing of label `lab`
+  let sx=-1,sy=-1;
+  for(let p=0;p<w*h&&sx<0;p++)
+    if(labels[p]===lab){sx=p%w;sy=(p/w)|0;}
+  if(sx<0)return null;
+  const dirs=[[1,0],[1,1],[0,1],[-1,1],[-1,0],[-1,-1],[0,-1],[1,-1]];
+  const inside=(x,y)=>x>=0&&y>=0&&x<w&&y<h&&labels[y*w+x]===lab;
+  const pts=[];
+  let cx=sx,cy=sy,dir=6,guard=0,max=w*h*4;
+  do{
+    pts.push([cx,cy]);
+    let found=false;
+    for(let k=0;k<8;k++){
+      const nd=(dir+k)%8,nx=cx+dirs[nd][0],ny=cy+dirs[nd][1];
+      if(inside(nx,ny)){cx=nx;cy=ny;dir=(nd+6)%8;found=true;break;}
+    }
+    if(!found)break;
+    if(++guard>max)break;
+  }while(!(cx===sx&&cy===sy)&&guard<max);
+  // decimate very dense contours for speed
+  if(pts.length>600){
+    const step=Math.ceil(pts.length/600),d=[];
+    for(let k=0;k<pts.length;k+=step)d.push(pts[k]);
+    return d;
+  }
+  return pts;
+}
+
+/* periodic Catmull-Rom smoothing -> natural, non-jagged outlines */
+function smoothSpline(pts,strength){
+  if(pts.length<6||strength<=0)return pts.slice();
+  const n=pts.length, out=[];
+  const samples=Math.max(2,Math.round(6-strength));   // fewer = smoother
+  const at=k=>pts[((k%n)+n)%n];
+  for(let k=0;k<n;k++){
+    const p0=at(k-1),p1=at(k),p2=at(k+1),p3=at(k+2);
+    for(let t=0;t<1;t+=1/samples){
+      const t2=t*t,t3=t2*t;
+      out.push([
+        0.5*((2*p1[0])+(-p0[0]+p2[0])*t+
+          (2*p0[0]-5*p1[0]+4*p2[0]-p3[0])*t2+
+          (-p0[0]+3*p1[0]-3*p2[0]+p3[0])*t3),
+        0.5*((2*p1[1])+(-p0[1]+p2[1])*t+
+          (2*p0[1]-5*p1[1]+4*p2[1]-p3[1])*t2+
+          (-p0[1]+3*p1[1]-3*p2[1]+p3[1])*t3)
+      ]);
+    }
+  }
+  return out;
+}
+
+/* =====================================================================
+   5. MEASUREMENT
+   ===================================================================== */
+function polygonArea(pts){          // shoelace, pixels^2
+  let a=0;
+  for(let k=0;k<pts.length;k++){
+    const [x1,y1]=pts[k],[x2,y2]=pts[(k+1)%pts.length];
+    a+=x1*y2-x2*y1;
+  }
+  return Math.abs(a)/2;
+}
+function polygonPerim(pts){
+  let p=0;
+  for(let k=0;k<pts.length;k++){
+    const [x1,y1]=pts[k],[x2,y2]=pts[(k+1)%pts.length];
+    p+=Math.hypot(x2-x1,y2-y1);
+  }
+  return p;
+}
+function measureROI(pts){
+  const {tempMap,iw,ih,pxPerMM}=S;
+  // bounding box raster scan for temperature stats inside the polygon
+  let minx=iw,miny=ih,maxx=0,maxy=0;
+  for(const [x,y] of pts){
+    if(x<minx)minx=x;if(x>maxx)maxx=x;
+    if(y<miny)miny=y;if(y>maxy)maxy=y;
+  }
+  minx=Math.max(0,minx|0);miny=Math.max(0,miny|0);
+  maxx=Math.min(iw-1,maxx|0);maxy=Math.min(ih-1,maxy|0);
+  let mx=-1e9,mn=1e9,sum=0,cnt=0;
+  for(let y=miny;y<=maxy;y++){
+    for(let x=minx;x<=maxx;x++){
+      if(pointInPoly(x,y,pts)){
+        const t=tempMap[y*iw+x];
+        if(t>mx)mx=t;if(t<mn)mn=t;sum+=t;cnt++;
+      }
+    }
+  }
+  const areaPx=polygonArea(pts), perimPx=polygonPerim(pts);
+  const out={areaPx:Math.round(areaPx),perimPx:+perimPx.toFixed(1),
+    maxT:cnt?+mx.toFixed(2):null,minT:cnt?+mn.toFixed(2):null,
+    meanT:cnt?+(sum/cnt).toFixed(2):null};
+  if(pxPerMM>0){
+    out.areaMM2=+(areaPx/(pxPerMM*pxPerMM)).toFixed(2);
+    out.perimMM=+(perimPx/pxPerMM).toFixed(2);
+    out.areaCM2=+(areaPx/(pxPerMM*pxPerMM)/100).toFixed(3);
+    out.perimCM=+(perimPx/pxPerMM/10).toFixed(2);
+  }
+  return out;
+}
+function pointInPoly(x,y,pts){
+  let inside=false;
+  for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+    const xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
+    if(((yi>y)!==(yj>y))&&(x<(xj-xi)*(y-yi)/(yj-yi)+xi))inside=!inside;
+  }
+  return inside;
+}
+
+/* =====================================================================
+   6. RENDERING
+   ===================================================================== */
+const stage=$("stage"), sctx=stage.getContext("2d");
+
+function fitView(){
+  const wrapW=$("stageWrap").clientWidth-2;
+  const scale=Math.min(1,wrapW/S.iw);
+  stage.width=Math.round(S.iw*scale);
+  stage.height=Math.round(S.ih*scale);
+  S.view.scale=scale;
+}
+function render(){
+  if(!S.img)return;
+  const {scale}=S.view;
+  sctx.clearRect(0,0,stage.width,stage.height);
+  sctx.drawImage(S.img,0,0,stage.width,stage.height);
+  // live highlight layer
+  if(S.hiCanvas)
+    sctx.drawImage(S.hiCanvas,0,0,stage.width,stage.height);
+  // accepted ROIs -- each uses its own stroke width / fill settings
+  S.rois.forEach((roi,idx)=>{
+    const sel=(idx===S.selROI);
+    const lw=roi.strokeW||2.4;
+    drawPoly(roi.pts,roi.color,sel?lw+1.6:lw,
+             roi.fill>0?roi.fill:0);
+    if(sel){
+      // white guide ring + vertex dots for the selected lesion
+      drawPoly(roi.pts,"#ffffff",1.4,0);
+      const s=S.view.scale;
+      sctx.fillStyle="#fff";
+      roi.pts.forEach((p,i)=>{ if(i%8===0)
+        sctx.fillRect(p[0]*s-2,p[1]*s-2,4,4); });
+    }
+    if(S.showNums){
+      const c=centroid(roi.pts);
+      sctx.fillStyle="#fff";
+      sctx.font=(sel?"600 18px ":"600 14px ")+"'Spline Sans Mono'";
+      sctx.strokeStyle="rgba(0,0,0,.75)";sctx.lineWidth=3.5;
+      sctx.strokeText(idx+1,c[0]*scale,c[1]*scale);
+      sctx.fillText(idx+1,c[0]*scale,c[1]*scale);
+    }
+  });
+  // candidates (dashed) -- the hovered one flashes brighter/thicker
+  S.candidates.forEach((c,i)=>{
+    const hot=(i===S._hoverCand);
+    sctx.setLineDash(hot?[]:[5,4]);
+    drawPoly(c.pts,"#f0a23c",hot?3.4:1.8,hot?0.18:0);
+  });
+  sctx.setLineDash([]);
+  // calibration line
+  if(S.calPts.length){
+    sctx.strokeStyle="#46c6b8";sctx.fillStyle="#46c6b8";sctx.lineWidth=2;
+    sctx.beginPath();
+    S.calPts.forEach((p,i)=>{
+      const x=p[0]*scale,y=p[1]*scale;
+      i?sctx.lineTo(x,y):sctx.moveTo(x,y);
+      sctx.fillRect(x-3,y-3,6,6);
+    });
+    sctx.stroke();
+  }
+  // in-progress hand-drawn polygon
+  if(S.drawPts.length){
+    sctx.strokeStyle="#e2624b";sctx.fillStyle="#e2624b";sctx.lineWidth=2;
+    sctx.beginPath();
+    S.drawPts.forEach((p,i)=>{
+      const x=p[0]*scale,y=p[1]*scale;
+      i?sctx.lineTo(x,y):sctx.moveTo(x,y);
+    });
+    sctx.stroke();
+    S.drawPts.forEach(p=>sctx.fillRect(p[0]*scale-3,p[1]*scale-3,6,6));
+  }
+}
+function drawPoly(pts,color,lw,fillOpacity){
+  // fillOpacity: 0 = no fill; >0 = filled at that alpha (0..1)
+  const s=S.view.scale;
+  sctx.strokeStyle=color;sctx.lineWidth=lw;
+  sctx.beginPath();
+  pts.forEach((p,i)=>{const x=p[0]*s,y=p[1]*s;
+    i?sctx.lineTo(x,y):sctx.moveTo(x,y);});
+  sctx.closePath();
+  if(fillOpacity>0){
+    const a=Math.round(Math.min(1,fillOpacity)*255)
+            .toString(16).padStart(2,"0");
+    sctx.fillStyle=color+a;
+    sctx.fill();
+  }
+  sctx.stroke();
+}
+function centroid(pts){
+  let x=0,y=0;pts.forEach(p=>{x+=p[0];y+=p[1];});
+  return [x/pts.length,y/pts.length];
+}
+
+/* =====================================================================
+   7. THE LIVE DRAGGABLE SCALE
+   ===================================================================== */
+function paintScaleGradient(){
+  const grad=$("scaleGrad");
+  if(S.lut){
+    const stops=S.lut.filter((_,k)=>k%16===0)
+      .map(c=>`rgb(${c.r|0},${c.g|0},${c.b|0})`);
+    grad.style.background=`linear-gradient(90deg,${stops.join(",")})`;
+  }else{
+    grad.style.background=
+      "linear-gradient(90deg,#0000ff,#00ffff,#7dff7d,#ffff00,#ff7d00,#8b0000)";
+  }
+  // ticks -- inherit modality unit (degree mark only for temperature)
+  const tk=$("scaleTicks");tk.innerHTML="";
+  const deg=curUnit().startsWith("°")?"°":"";
+  for(let k=0;k<=5;k++){
+    const f=k/5, t=S.tMin+f*(S.tMax-S.tMin);
+    const s=document.createElement("span");
+    s.style.left=(f*100)+"%";
+    s.textContent=(Math.round(t*10)/10)+deg;
+    tk.appendChild(s);
+  }
+  updateScaleVisual();
+}
+function updateScaleVisual(){
+  const f=(S.threshold-S.tMin)/(S.tMax-S.tMin);
+  const cl=Math.min(1,Math.max(0,f));
+  $("scaleMask").style.width=(cl*100)+"%";
+  $("scaleHandle").style.left=(cl*100)+"%";
+  $("thrVal").textContent=(Math.round(S.threshold*10)/10);
+}
+function setThreshold(t,live){
+  S.threshold=Math.min(S.tMax,Math.max(S.tMin,t));
+  updateScaleVisual();
+  if(live && S.tempMap) buildHighlight();   // <-- continuous update on drag
+}
+
+(function initScaleDrag(){
+  const bar=$("scaleBar");
+  let dragging=false;
+  const tFromEvent=(e)=>{
+    const rect=bar.getBoundingClientRect();
+    const cx=(e.touches?e.touches[0].clientX:e.clientX);
+    const f=Math.min(1,Math.max(0,(cx-rect.left)/rect.width));
+    return S.tMin+f*(S.tMax-S.tMin);
+  };
+  const start=(e)=>{dragging=true;setThreshold(tFromEvent(e),true);
+    e.preventDefault();};
+  const move=(e)=>{if(dragging)setThreshold(tFromEvent(e),true);};
+  const end=()=>{dragging=false;};
+  bar.addEventListener("mousedown",start);
+  window.addEventListener("mousemove",move);
+  window.addEventListener("mouseup",end);
+  bar.addEventListener("touchstart",start,{passive:false});
+  window.addEventListener("touchmove",move,{passive:false});
+  window.addEventListener("touchend",end);
+})();
+
+/* =====================================================================
+   8. UI WIRING
+   ===================================================================== */
+/* decode the current image and auto-detect its embedded colorbar.
+   Sets S.barBox + S.lut. Returns true if a bar was found. */
+function autoDetectColorbar(){
+  if(!S.img)return false;
+  const off=document.createElement("canvas");
+  off.width=S.iw;off.height=S.ih;
+  const c=off.getContext("2d",{willReadFrequently:true});
+  c.drawImage(S.img,0,0);
+  const data=c.getImageData(0,0,S.iw,S.ih).data;
+  const box=detectColorbar(data,S.iw,S.ih);
+  if(box){S.barBox=box;S.lut=sampleColorbar(data,S.iw,box);return true;}
+  S.barBox=null;S.lut=null;return false;
+}
+
+$("fileIn").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  $("fileName").textContent=f.name;
+  const img=new Image();
+  img.onload=()=>{
+    S.img=img;S.iw=img.naturalWidth;S.ih=img.naturalHeight;
+    S.candidates=[];S.rois=[];S.calPts=[];S.drawPts=[];S.selROI=-1;
+    S.hiCanvas=null;S.pxPerMM=0;$("pxPerMM").textContent="\u2014";
+    $("calNote").textContent="No calibration set \u2014 areas in pixels only.";
+    $("empty").style.display="none";stage.style.display="block";
+    fitView();
+
+    // use the current palette (Swift by default) as the value scale
+    if(!S.lut) S.lut=paletteToLut(S.paletteStops);
+    paintScaleGradient();
+    buildTempMap();
+    setThreshold(S.threshold,false);
+    buildHighlight();
+    renderROIs();
+    toast("Image loaded \u2014 using the "+$("palTag").textContent+" scale.");
+  };
+  img.src=URL.createObjectURL(f);
+});
+
+window.addEventListener("resize",()=>{if(S.img){fitView();render();}});
+
+/* mode switching */
+function setMode(m){
+  S.mode=m;
+  $("modeView").classList.toggle("active",m==="view");
+  $("modeCal").classList.toggle("active",m==="cal");
+  $("modeDraw").classList.toggle("active",m==="draw");
+  const help={
+    view:"View mode: inspect the image and the live highlight.",
+    cal :"Calibrate mode: click the two opposite edges of the 1 cm sticker.",
+    draw:"Draw mode: click to place outline points; click near the first "+
+         "point (or press Enter) to close the lesion."
+  };
+  $("modeHelp").textContent=help[m];
+  if(m!=="cal")S.calPts=[];
+  if(m!=="draw")S.drawPts=[];
+  render();
+}
+$("modeView").onclick=()=>setMode("view");
+$("modeCal").onclick =()=>setMode("cal");
+$("modeDraw").onclick=()=>setMode("draw");
+
+/* clicks on the image */
+stage.addEventListener("click",e=>{
+  if(!S.img)return;
+  const rect=stage.getBoundingClientRect();
+  const x=(e.clientX-rect.left)/S.view.scale;
+  const y=(e.clientY-rect.top)/S.view.scale;
+
+  if(S.mode==="cal"){
+    S.calPts.push([x,y]);
+    if(S.calPts.length===2){
+      const d=Math.hypot(S.calPts[0][0]-S.calPts[1][0],
+                          S.calPts[0][1]-S.calPts[1][1]);
+      const mm=parseFloat($("calMM").value)||10;
+      S.pxPerMM=d/mm;
+      $("pxPerMM").textContent=S.pxPerMM.toFixed(2);
+      $("calNote").textContent=
+        `Set from a ${d.toFixed(1)} px line = ${mm} mm. `+
+        `Areas now in cm\u00b2.`;
+      toast("Measurement scale calibrated.");
+      renderROIs();
+    }else if(S.calPts.length>2){
+      S.calPts=[[x,y]];
+    }
+    render();
+  }
+  else if(S.mode==="draw"){
+    // close polygon if clicking near the first point
+    if(S.drawPts.length>2){
+      const f=S.drawPts[0];
+      if(Math.hypot(f[0]-x,f[1]-y)<10/S.view.scale){
+        commitDrawn();return;
+      }
+    }
+    S.drawPts.push([x,y]);
+    render();
+  }
+});
+window.addEventListener("keydown",e=>{
+  if(e.key==="Enter"&&S.mode==="draw"&&S.drawPts.length>2)commitDrawn();
+  if(e.key==="Escape"){S.drawPts=[];render();}
+  // arrow keys step through accepted ROIs (when not mid-draw)
+  if(S.mode!=="draw"&&S.rois.length){
+    if(e.key==="ArrowRight"||e.key==="ArrowDown"){
+      selectROI(S.selROI>=S.rois.length-1?0:S.selROI+1);e.preventDefault();}
+    if(e.key==="ArrowLeft"||e.key==="ArrowUp"){
+      selectROI(S.selROI<=0?S.rois.length-1:S.selROI-1);e.preventDefault();}
+  }
+});
+function commitDrawn(){
+  const sigma=parseFloat($("smoothR").value);
+  const pts=smoothSpline(S.drawPts,sigma);
+  S.rois.push(makeROI(pts));
+  S.drawPts=[];
+  S.selROI=S.rois.length-1;            // select the lesion just drawn
+  toast(`Added as Lesion ${S.rois.length}.`);
+  renderROIs();render();
+}
+
+/* range / smoothing / reverse */
+$("tMin").addEventListener("change",refreshCalibration);
+$("tMax").addEventListener("change",refreshCalibration);
+$("reverseBtn").addEventListener("click",()=>{
+  if(S.lut){S.lut.reverse();paintScaleGradient();buildTempMap();
+    buildHighlight();toast("Colorbar reversed.");}
+});
+$("smoothR").addEventListener("input",()=>{
+  $("smoothV").textContent=$("smoothR").value;
+});
+function refreshCalibration(){
+  S.tMin=parseFloat($("tMin").value);
+  S.tMax=parseFloat($("tMax").value);
+  if(S.threshold<S.tMin)S.threshold=S.tMin;
+  if(S.threshold>S.tMax)S.threshold=S.tMax;
+  paintScaleGradient();
+  if(S.img){buildTempMap();buildHighlight();}
+}
+
+/* detection */
+$("detectBtn").addEventListener("click",()=>{
+  if(!S.tempMap){toast("Load an image first.");return;}
+  S.candidates=detectRegions();
+  renderCandidates();render();
+  toast(`${S.candidates.length} candidate region(s) found.`);
+});
+
+function renderCandidates(){
+  const area=$("candArea");area.innerHTML="";
+  if(!S.candidates.length){
+    area.innerHTML='<div class="note">No candidates. '+
+      'Drag the threshold or lower the minimum size, then detect again.</div>';
+    return;
+  }
+  // keep-all shortcut: accept every candidate at once
+  const allDiv=document.createElement("div");
+  allDiv.className="roi-item";
+  allDiv.innerHTML=`<span class="grow">${S.candidates.length} candidate(s)</span>`;
+  const keepAll=document.createElement("button");
+  keepAll.textContent="Keep all";keepAll.className="primary";
+  keepAll.onclick=(e)=>{
+    e.stopPropagation();
+    const n=S.candidates.length;
+    S.candidates.forEach(c=>S.rois.push(makeROI(c.pts)));
+    S.candidates=[];
+    S.selROI=S.rois.length-1;
+    S._hoverCand=-1;
+    renderCandidates();renderROIs();render();
+    toast(`Kept ${n} region(s) as lesions.`);
+  };
+  allDiv.appendChild(keepAll);
+  area.appendChild(allDiv);
+  S.candidates.forEach((c,i)=>{
+    const m=measureROI(c.pts);
+    const div=document.createElement("div");
+    div.className="roi-item";
+    div.innerHTML=
+      `<span class="roi-num" style="color:#f0a23c">${i+1}</span>`+
+      `<span class="grow">max ${m.maxT}${uSuffix()} &middot; `+
+      `${m.areaCM2!=null?m.areaCM2+' cm\u00b2':m.areaPx+' px'}</span>`;
+    // hovering a candidate row flashes it on the image
+    div.onmouseenter=()=>{S._hoverCand=i;render();};
+    div.onmouseleave=()=>{S._hoverCand=-1;render();};
+    const keep=document.createElement("button");
+    keep.textContent="Keep";keep.className="primary";
+    keep.onclick=(e)=>{
+      e.stopPropagation();
+      S.rois.push(makeROI(c.pts));
+      S.candidates.splice(i,1);
+      S.selROI=S.rois.length-1;          // auto-select the lesion just kept
+      S._hoverCand=-1;
+      renderCandidates();renderROIs();render();
+      toast(`Kept as Lesion ${S.rois.length}.`);
+    };
+    const drop=document.createElement("button");
+    drop.textContent="Drop";drop.className="danger";
+    drop.onclick=(e)=>{e.stopPropagation();
+      S.candidates.splice(i,1);S._hoverCand=-1;renderCandidates();render();};
+    div.appendChild(keep);div.appendChild(drop);
+    area.appendChild(div);
+  });
+}
+
+/* select / navigate accepted ROIs */
+function selectROI(i){
+  if(i<-1||i>=S.rois.length)return;
+  S.selROI=i;
+  renderROIs();render();
+}
+function renderROIs(){
+  const list=$("roiList");list.innerHTML="";
+  $("roiCount").textContent = S.rois.length
+    ? (S.selROI>=0 ? `Lesion ${S.selROI+1} of ${S.rois.length}`
+                   : `${S.rois.length} ROI(s) \u2014 click one`)
+    : "No ROIs";
+  $("roiPrev").disabled = $("roiNext").disabled = (S.rois.length===0);
+  if(!S.rois.length){
+    list.innerHTML='<div class="note">No ROIs yet. Keep a detected '+
+      'region or hand-draw one.</div>';
+    return;
+  }
+  S.rois.forEach((roi,i)=>{
+    const m=measureROI(roi.pts);
+    const div=document.createElement("div");
+    div.className="roi-item"+(i===S.selROI?" selected":"");
+    const size=m.areaCM2!=null?`${m.areaCM2} cm\u00b2`:`${m.areaPx} px`;
+    div.innerHTML=
+      `<span class="dot" style="background:${roi.color}"></span>`+
+      `<span class="roi-num">${i+1}</span>`+
+      `<span class="grow">max <b>${m.maxT}${uSuffix()}</b> &middot; `+
+      `mean ${m.meanT}${uSuffix()}<br>`+
+      `<span style="color:var(--ink-dim)">${size} &middot; `+
+      `perim ${m.perimCM!=null?m.perimCM+' cm':m.perimPx+' px'}`+
+      `</span></span>`;
+    div.onclick=()=>selectROI(i);
+    const del=document.createElement("button");
+    del.textContent="Delete";del.className="danger";
+    del.onclick=(e)=>{
+      e.stopPropagation();
+      S.rois.splice(i,1);
+      if(S.selROI>=S.rois.length)S.selROI=S.rois.length-1;
+      renderROIs();render();
+    };
+    div.appendChild(del);
+    list.appendChild(div);
+    if(i===S.selROI) setTimeout(()=>div.scrollIntoView({block:"nearest"}),0);
+  });
+  updateTotals();
+  syncStylePanel();
+}
+
+/* ---- Case Summary: totals + peak (delta or absolute) value ---- */
+function updateTotals(){
+  let areaPx=0,perimPx=0,peak=-Infinity;
+  S.rois.forEach(roi=>{
+    const m=measureROI(roi.pts);
+    areaPx+=m.areaPx; perimPx+=m.perimPx;
+    if(m.maxT!=null && m.maxT>peak) peak=m.maxT;
+  });
+  $("csCount").textContent=S.rois.length;
+
+  const mod=curMod();
+  $("csDeltaLabel").textContent=mod.delta?"\u0394 max":"Peak max";
+
+  if(!S.rois.length){
+    $("csDeltaMax").textContent="\u2014";
+    $("csTotalArea").textContent="\u2014";
+    $("csTotalPerim").textContent="\u2014";
+    return;
+  }
+  // peak value: delta modalities show Δ + signed value, others show raw peak
+  if(mod.delta){
+    const sign=peak>0?"+":"";
+    $("csDeltaMax").textContent="\u0394 "+sign+peak.toFixed(2)+uSuffix();
+  }else{
+    $("csDeltaMax").textContent=peak.toFixed(2)+uSuffix();
+  }
+
+  // area always cm², perimeter always cm (px fallback if uncalibrated)
+  if(S.pxPerMM>0){
+    const cm2=areaPx/(S.pxPerMM*S.pxPerMM)/100;
+    const cm =perimPx/S.pxPerMM/10;
+    $("csTotalArea").textContent=cm2.toFixed(3)+" cm\u00b2";
+    $("csTotalPerim").textContent=cm.toFixed(2)+" cm";
+  }else{
+    $("csTotalArea").textContent=Math.round(areaPx)+" px";
+    $("csTotalPerim").textContent=Math.round(perimPx)+" px";
+  }
+}
+
+/* Case Summary controls */
+$("showNums").addEventListener("change",e=>{
+  S.showNums=e.target.checked;
+  render();
+});
+
+/* =====================================================================
+   MODALITY  -- unit / range / delta semantics, applied to every readout
+   ===================================================================== */
+// refresh just the unit-dependent labels (no range change)
+function applyUnitLabels(){
+  const u=curUnit();
+  $("thrUnit").textContent=u;
+  $("rangeUnit").textContent=u;
+  paintScaleGradient();          // re-tick with the right unit
+  if(S.rois.length){renderROIs();}
+  if(S.candidates.length){renderCandidates();}
+  updateTotals();
+}
+// switch modality: set range + threshold + unit + suggested preset
+function applyModality(key,opts){
+  opts=opts||{};
+  S.modality=key;
+  const mod=curMod();
+  $("modality").value=key;
+  $("customRow").style.display=(key==="custom")?"flex":"none";
+  // adopt the modality's value range + default threshold
+  S.tMin=mod.min; S.tMax=mod.max;
+  $("tMin").value=mod.min; $("tMax").value=mod.max;
+  S.threshold=Math.min(S.tMax,Math.max(S.tMin,mod.thr));
+  // adopt the modality's default palette as the working scale
+  $("palettePreset").value=mod.preset;
+  S.paletteStops=PRESETS[mod.preset].slice();
+  S.lut=paletteToLut(S.paletteStops);
+  setPalTag(PNAMES[mod.preset]||mod.preset);
+  renderStops(); updatePalettePreview();
+  // rebuild the value map first, then refresh unit-dependent readouts
+  if(S.img && !opts.skipMap){buildTempMap();buildHighlight();}
+  applyUnitLabels();
+  updateScaleVisual();
+}
+$("modality").addEventListener("change",e=>{
+  applyModality(e.target.value);
+  toast(curMod().name+" modality selected.");
+});
+$("customName").addEventListener("input",applyUnitLabels);
+$("customUnit").addEventListener("input",applyUnitLabels);
+
+/* =====================================================================
+   PALETTE EDITOR  -- presets + 2..12 editable stops; Swift is the default
+   ===================================================================== */
+const PNAMES={swift:"Swift",jet:"Jet",iron:"Iron",inferno:"Inferno",
+              viridis:"Viridis",grayscale:"Grayscale"};
+function setPalTag(label){
+  const t=$("palTag");
+  t.textContent=label;
+  t.classList.toggle("custom",label==="custom");
+}
+function hexToRgb(h){
+  h=h.replace("#","");
+  if(h.length===3)h=h.split("").map(c=>c+c).join("");
+  return {r:parseInt(h.slice(0,2),16),g:parseInt(h.slice(2,4),16),
+          b:parseInt(h.slice(4,6),16)};
+}
+function paletteToLut(stops,n){
+  n=n||256;
+  const rgb=stops.map(hexToRgb), m=rgb.length, lut=[];
+  if(m===1){for(let k=0;k<n;k++)lut.push({...rgb[0]});return lut;}
+  for(let k=0;k<n;k++){
+    const f=k/(n-1)*(m-1);
+    const i=Math.min(m-2,Math.floor(f)), t=f-i;
+    lut.push({
+      r:rgb[i].r+(rgb[i+1].r-rgb[i].r)*t,
+      g:rgb[i].g+(rgb[i+1].g-rgb[i].g)*t,
+      b:rgb[i].b+(rgb[i+1].b-rgb[i].b)*t,
+    });
+  }
+  return lut;
+}
+function updatePalettePreview(){
+  const stops=S.paletteStops||PRESETS.jet;
+  $("palettePreview").style.background=
+    `linear-gradient(90deg,${stops.join(",")})`;
+}
+/* ---- lightweight color picker: swatches + HSV wheel (no OS picker) ---- */
+const SWATCHES=[
+ "#000000","#404040","#808080","#bfbfbf","#ffffff","#7a3b12","#b5651d","#e2a76f",
+ "#e11d1d","#ff6a00","#ffcc00","#36c11e","#0aa15a","#1e9bd7","#1340c4","#5a2ea6",
+ "#00028b","#0043ff","#15f2ef","#a1ff64","#ffba0a","#fa1a09","#980600","#ff2d9b"];
+let cpState={hex:"#000000",h:0,s:0,v:0,onChange:null};
+const toHex=({r,g,b})=>"#"+[r,g,b].map(v=>
+  Math.max(0,Math.min(255,Math.round(v))).toString(16).padStart(2,"0")).join("");
+function hsv2rgb(h,s,v){
+  const c=v*s,x=c*(1-Math.abs(((h/60)%2)-1)),m=v-c;let r,g,b;
+  if(h<60){r=c;g=x;b=0;}else if(h<120){r=x;g=c;b=0;}
+  else if(h<180){r=0;g=c;b=x;}else if(h<240){r=0;g=x;b=c;}
+  else if(h<300){r=x;g=0;b=c;}else{r=c;g=0;b=x;}
+  return {r:(r+m)*255,g:(g+m)*255,b:(b+m)*255};
+}
+function rgb2hsv(r,g,b){
+  r/=255;g/=255;b/=255;
+  const mx=Math.max(r,g,b),mn=Math.min(r,g,b),d=mx-mn;let h=0;
+  if(d){if(mx===r)h=((g-b)/d)%6;else if(mx===g)h=(b-r)/d+2;else h=(r-g)/d+4;
+    h*=60;if(h<0)h+=360;}
+  return {h,s:mx?d/mx:0,v:mx};
+}
+function cpDrawWheel(){
+  const cv=$("cpWheel"),ctx=cv.getContext("2d"),W=cv.width,R=W/2;
+  const img=ctx.createImageData(W,W),d=img.data,v=cpState.v||0.0001;
+  for(let y=0;y<W;y++)for(let x=0;x<W;x++){
+    const dx=x-R,dy=y-R,rr=Math.hypot(dx,dy),idx=(y*W+x)*4;
+    if(rr>R){d[idx+3]=0;continue;}
+    let h=Math.atan2(dy,dx)*180/Math.PI;if(h<0)h+=360;
+    const c=hsv2rgb(h,Math.min(1,rr/(R-1)),v);
+    d[idx]=c.r;d[idx+1]=c.g;d[idx+2]=c.b;d[idx+3]=255;
+  }
+  ctx.putImageData(img,0,0);
+  const mr=cpState.s*(R-1),ma=cpState.h*Math.PI/180;
+  const mx=R+mr*Math.cos(ma),my=R+mr*Math.sin(ma);
+  ctx.beginPath();ctx.arc(mx,my,5,0,7);ctx.strokeStyle="#000";ctx.lineWidth=3;ctx.stroke();
+  ctx.beginPath();ctx.arc(mx,my,5,0,7);ctx.strokeStyle="#fff";ctx.lineWidth=1.5;ctx.stroke();
+}
+function cpUpdate(){
+  cpState.hex=toHex(hsv2rgb(cpState.h,cpState.s,cpState.v));
+  $("cpPreview").style.background=cpState.hex;
+  $("cpHex").textContent=cpState.hex;
+  if(cpState.onChange)cpState.onChange(cpState.hex);
+}
+function cpSetFromHex(hex){
+  const c=hexToRgb(hex),hsv=rgb2hsv(c.r,c.g,c.b);
+  cpState.h=hsv.h;cpState.s=hsv.s;cpState.v=hsv.v;
+  $("cpLight").value=Math.round(hsv.v*100);
+  cpDrawWheel();cpUpdate();
+}
+function openColorPicker(anchor,hex,onChange){
+  const sw=$("cpSwatches");
+  if(!sw.childElementCount){
+    SWATCHES.forEach(col=>{
+      const b=document.createElement("button");
+      b.className="swatch";b.style.background=col;b.title=col;
+      b.addEventListener("click",()=>cpSetFromHex(col));
+      sw.appendChild(b);
+    });
+  }
+  cpState={hex,h:0,s:0,v:0,onChange:null};   // suppress onChange during setup
+  cpSetFromHex(hex);
+  cpState.onChange=onChange;
+  const pop=$("colorPop");pop.style.display="block";
+  const ar=anchor.getBoundingClientRect(),pw=pop.offsetWidth,ph=pop.offsetHeight;
+  let left=ar.left,top=ar.bottom+6;
+  if(left+pw>window.innerWidth-8)left=window.innerWidth-8-pw;
+  if(top+ph>window.innerHeight-8)top=ar.top-6-ph;
+  pop.style.left=Math.max(8,left)+"px";pop.style.top=Math.max(8,top)+"px";
+}
+function closeColorPicker(){$("colorPop").style.display="none";cpState.onChange=null;}
+$("cpWheel").addEventListener("click",e=>{
+  const cv=$("cpWheel"),r=cv.getBoundingClientRect(),R=cv.width/2;
+  const x=(e.clientX-r.left)*(cv.width/r.width)-R,
+        y=(e.clientY-r.top)*(cv.height/r.height)-R;
+  let h=Math.atan2(y,x)*180/Math.PI;if(h<0)h+=360;
+  cpState.h=h;cpState.s=Math.min(1,Math.hypot(x,y)/(R-1));
+  cpDrawWheel();cpUpdate();
+});
+$("cpLight").addEventListener("input",e=>{
+  cpState.v=parseInt(e.target.value,10)/100;cpDrawWheel();cpUpdate();
+});
+$("cpDone").addEventListener("click",closeColorPicker);
+document.addEventListener("mousedown",e=>{
+  const pop=$("colorPop");
+  if(pop.style.display==="none")return;
+  if(pop.contains(e.target))return;
+  if(e.target.classList&&e.target.classList.contains("swatch"))return;
+  closeColorPicker();
+});
+
+function renderStops(){
+  const wrap=$("paletteStops");wrap.innerHTML="";
+  (S.paletteStops||[]).forEach((hex,i)=>{
+    const btn=document.createElement("button");
+    btn.className="swatch";btn.style.background=hex;btn.title=hex;
+    btn.addEventListener("click",()=>openColorPicker(btn,S.paletteStops[i],hx=>{
+      S.paletteStops[i]=hx;btn.style.background=hx;btn.title=hx;
+      setPalTag("custom");updatePalettePreview();
+    }));
+    wrap.appendChild(btn);
+  });
+}
+$("palettePreset").addEventListener("change",e=>{
+  const key=e.target.value;
+  S.paletteStops=PRESETS[key].slice();
+  S.lut=paletteToLut(S.paletteStops);
+  setPalTag(PNAMES[key]||key);
+  renderStops();updatePalettePreview();
+  paintScaleGradient();
+  if(S.img){buildTempMap();buildHighlight();renderROIs();}
+  toast((PNAMES[key]||key)+" palette applied.");
+});
+$("addStop").addEventListener("click",()=>{
+  if(S.paletteStops.length>=MAX_STOPS){toast("Max "+MAX_STOPS+" stops.");return;}
+  S.paletteStops.push(S.paletteStops[S.paletteStops.length-1]);
+  setPalTag("custom");
+  renderStops();updatePalettePreview();
+});
+$("removeStop").addEventListener("click",()=>{
+  if(S.paletteStops.length<=2){toast("Min 2 stops.");return;}
+  S.paletteStops.pop();
+  setPalTag("custom");
+  renderStops();updatePalettePreview();
+});
+$("applyPalette").addEventListener("click",()=>{
+  S.lut=paletteToLut(S.paletteStops);
+  setPalTag("custom");
+  paintScaleGradient();
+  if(S.img){buildTempMap();buildHighlight();renderROIs();}
+  toast("Custom palette applied.");
+});
+
+/* =====================================================================
+   NEW FILE  -- wipe everything back to defaults
+   ===================================================================== */
+function resetAll(){
+  S.img=null;S.iw=0;S.ih=0;
+  S.view={x:0,y:0,scale:1};
+  S.lut=null;S.barBox=null;S.tempMap=null;S.validMask=null;
+  S.calPts=[];S.pxPerMM=0;S.drawPts=[];
+  S.candidates=[];S.rois=[];S.selROI=-1;S._hoverCand=-1;
+  S.hiCanvas=null;S.showNums=true;
+  // reset DOM inputs to defaults
+  $("fileIn").value="";
+  $("fileName").textContent="";
+  $("calMM").value=10;
+  $("smoothR").value=2;$("smoothV").textContent="2";
+  $("minSize").value=120;
+  $("showNums").checked=true;
+  $("customName").value="";$("customUnit").value="";
+  $("pxPerMM").textContent="\u2014";
+  $("calNote").textContent=
+    "No calibration set \u2014 areas will be reported in pixels only.";
+  // reset modality to thermal default (range/threshold/unit/palette = Swift)
+  applyModality("tempC",{skipMap:true});
+  // back to View mode, blank stage
+  setMode("view");
+  stage.style.display="none";
+  $("empty").style.display="";
+  sctx&&sctx.clearRect(0,0,stage.width,stage.height);
+  // repaint dependent UI
+  paintScaleGradient();updateScaleVisual();
+  renderROIs();renderCandidates();
+  toast("Reset \u2014 ready for a new image.");
+}
+$("newFileBtn").addEventListener("click",resetAll);
+
+/* ---- per-ROI appearance panel ---- */
+const FILL_LEVELS={none:0,light:0.14,med:0.30,solid:0.55};
+function syncStylePanel(){
+  const box=$("styleBox");
+  if(S.selROI<0||S.selROI>=S.rois.length){box.style.display="none";return;}
+  box.style.display="block";
+  const roi=S.rois[S.selROI];
+  $("styleNum").textContent=S.selROI+1;
+  $("styleColor").style.background=roi.color;
+  $("styleWidth").value=roi.strokeW;
+  $("styleWidthV").textContent=roi.strokeW;
+  const f=roi.fill||0;
+  $("fillNone").classList.toggle("active",f===0);
+  $("fillLight").classList.toggle("active",f===FILL_LEVELS.light);
+  $("fillMed").classList.toggle("active",f===FILL_LEVELS.med);
+  $("fillSolid").classList.toggle("active",f===FILL_LEVELS.solid);
+}
+function curROI(){return (S.selROI>=0)?S.rois[S.selROI]:null;}
+
+$("styleColor").addEventListener("click",()=>{
+  const r=curROI();if(!r)return;
+  openColorPicker($("styleColor"),r.color,hx=>{
+    r.color=hx;$("styleColor").style.background=hx;renderROIs();render();
+  });
+});
+$("styleWidth").addEventListener("input",e=>{
+  const r=curROI();if(!r)return;
+  r.strokeW=parseFloat(e.target.value);
+  $("styleWidthV").textContent=r.strokeW;
+  render();
+});
+function setFill(level){
+  const r=curROI();if(!r)return;
+  r.fill=level;syncStylePanel();render();
+}
+$("fillNone").addEventListener("click",()=>setFill(FILL_LEVELS.none));
+$("fillLight").addEventListener("click",()=>setFill(FILL_LEVELS.light));
+$("fillMed").addEventListener("click",()=>setFill(FILL_LEVELS.med));
+$("fillSolid").addEventListener("click",()=>setFill(FILL_LEVELS.solid));
+$("applyAll").addEventListener("click",()=>{
+  const r=curROI();if(!r)return;
+  S.rois.forEach(roi=>{
+    roi.color=r.color;roi.strokeW=r.strokeW;roi.fill=r.fill;
+  });
+  renderROIs();render();
+  toast("Style applied to all lesions.");
+});
+$("roiPrev").addEventListener("click",()=>{
+  if(!S.rois.length)return;
+  selectROI(S.selROI<=0?S.rois.length-1:S.selROI-1);
+});
+$("roiNext").addEventListener("click",()=>{
+  if(!S.rois.length)return;
+  selectROI(S.selROI>=S.rois.length-1?0:S.selROI+1);
+});
+
+/* exports */
+$("exportImg").addEventListener("click",()=>{
+  if(!S.img){toast("Nothing to export.");return;}
+  const off=document.createElement("canvas");
+  off.width=S.iw;off.height=S.ih;
+  const c=off.getContext("2d");
+  c.drawImage(S.img,0,0);
+  S.rois.forEach((roi,idx)=>{
+    c.beginPath();
+    roi.pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
+    c.closePath();
+    if(roi.fill>0){
+      const a=Math.round(Math.min(1,roi.fill)*255)
+              .toString(16).padStart(2,"0");
+      c.fillStyle=roi.color+a;c.fill();
+    }
+    c.strokeStyle=roi.color;c.lineWidth=(roi.strokeW||2.4)*1.3;
+    c.stroke();
+    if(S.showNums){
+      const ct=centroid(roi.pts);
+      c.fillStyle="#fff";c.strokeStyle="rgba(0,0,0,.8)";
+      c.font="600 22px sans-serif";c.lineWidth=4;
+      c.strokeText(idx+1,ct[0],ct[1]);c.fillText(idx+1,ct[0],ct[1]);
+    }
+  });
+  download(off.toDataURL("image/png"),"lesions_traced.png");
+});
+$("exportCsv").addEventListener("click",()=>{
+  if(!S.rois.length){toast("No ROIs to export.");return;}
+  const mod=curMod(), u=curUnit();
+  const uTag = u ? "("+u+")" : "";
+  const hdr=["lesion",
+    "area_px","area_mm2","area_cm2",
+    "perimeter_px","perimeter_mm","perimeter_cm",
+    "max"+uTag,"min"+uTag,"mean"+uTag];
+  const lines=[hdr.join(",")];
+
+  let areaPx=0,perimPx=0,peak=-Infinity;
+  S.rois.forEach((roi,i)=>{
+    const m=measureROI(roi.pts);
+    areaPx+=m.areaPx; perimPx+=m.perimPx;
+    if(m.maxT!=null && m.maxT>peak) peak=m.maxT;
+    lines.push([i+1,
+      m.areaPx, m.areaMM2??"", m.areaCM2??"",
+      m.perimPx, m.perimMM??"", m.perimCM??"",
+      m.maxT??"", m.minT??"", m.meanT??""].join(","));
+  });
+
+  // ---- final SUMMARY row: Δ/peak max, total area, total perimeter ----
+  const cal=S.pxPerMM>0;
+  const totAreaMM2 = cal ? +(areaPx/(S.pxPerMM*S.pxPerMM)).toFixed(2) : "";
+  const totAreaCM2 = cal ? +(areaPx/(S.pxPerMM*S.pxPerMM)/100).toFixed(3) : "";
+  const totPerimMM = cal ? +(perimPx/S.pxPerMM).toFixed(2) : "";
+  const totPerimCM = cal ? +(perimPx/S.pxPerMM/10).toFixed(2) : "";
+  const peakStr = (peak===-Infinity) ? ""
+    : (mod.delta ? (peak>0?"+":"")+peak.toFixed(2) : peak.toFixed(2));
+  lines.push(["SUMMARY",
+    Math.round(areaPx), totAreaMM2, totAreaCM2,
+    Math.round(perimPx), totPerimMM, totPerimCM,
+    peakStr, "", ""].join(","));
+
+  // UTF-8 BOM so Excel reads °, ², ₂ etc. correctly instead of mojibake
+  download("data:text/csv;charset=utf-8,"+
+    encodeURIComponent("\uFEFF"+lines.join("\n")),"lesion_measurements.csv");
+});
+/* ---- ImageJ .roi binary writer (polygon type) ---- */
+function makeImageJRoi(pts,name){
+  let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+  for(const [x,y] of pts){
+    if(x<minx)minx=x; if(y<miny)miny=y;
+    if(x>maxx)maxx=x; if(y>maxy)maxy=y;
+  }
+  minx=Math.round(minx);miny=Math.round(miny);
+  maxx=Math.round(maxx);maxy=Math.round(maxy);
+  const n=pts.length, headerSize=64, coordSize=4*n;
+  const nameLen=(name||"").length, header2Size=64;
+  const total=headerSize+coordSize+header2Size+nameLen*2;
+  const buf=new ArrayBuffer(total), dv=new DataView(buf);
+  // magic 'Iout'
+  dv.setUint8(0,0x49);dv.setUint8(1,0x6f);
+  dv.setUint8(2,0x75);dv.setUint8(3,0x74);
+  dv.setInt16(4,227,false);            // version
+  dv.setUint8(6,0);                    // type 0 = polygon
+  dv.setInt16(8,miny,false);           // top
+  dv.setInt16(10,minx,false);          // left
+  dv.setInt16(12,maxy,false);          // bottom
+  dv.setInt16(14,maxx,false);          // right
+  dv.setInt16(16,n,false);             // n coordinates
+  const h2=headerSize+coordSize;
+  dv.setInt32(60,h2,false);            // header2 offset
+  let o=headerSize;
+  for(let i=0;i<n;i++){dv.setInt16(o,Math.round(pts[i][0])-minx,false);o+=2;}
+  for(let i=0;i<n;i++){dv.setInt16(o,Math.round(pts[i][1])-miny,false);o+=2;}
+  // header2: name offset + length
+  const nameOff=h2+header2Size;
+  dv.setInt32(h2+18,nameLen?nameOff:0,false);
+  dv.setInt32(h2+22,nameLen,false);
+  for(let i=0;i<nameLen;i++)
+    dv.setInt16(nameOff+i*2,name.charCodeAt(i),false);
+  return new Uint8Array(buf);
+}
+
+/* ---- minimal STORE-method zip writer ---- */
+function crc32(buf){
+  let table=crc32._t;
+  if(!table){table=crc32._t=[];
+    for(let n=0;n<256;n++){let c=n;
+      for(let k=0;k<8;k++)c=c&1?0xEDB88320^(c>>>1):c>>>1;
+      table[n]=c>>>0;}}
+  let crc=0xFFFFFFFF;
+  for(let i=0;i<buf.length;i++)crc=table[(crc^buf[i])&0xFF]^(crc>>>8);
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function makeZip(files){
+  const chunks=[],central=[],enc=new TextEncoder();let offset=0;
+  for(const f of files){
+    const name=enc.encode(f.name),data=f.data,crc=crc32(data);
+    const lh=new ArrayBuffer(30),dv=new DataView(lh);
+    dv.setUint32(0,0x04034b50,true);dv.setUint16(4,20,true);
+    dv.setUint32(14,crc,true);
+    dv.setUint32(18,data.length,true);dv.setUint32(22,data.length,true);
+    dv.setUint16(26,name.length,true);
+    chunks.push(new Uint8Array(lh),name,data);
+    const ch=new ArrayBuffer(46),cv=new DataView(ch);
+    cv.setUint32(0,0x02014b50,true);cv.setUint16(4,20,true);
+    cv.setUint16(6,20,true);cv.setUint32(16,crc,true);
+    cv.setUint32(20,data.length,true);cv.setUint32(24,data.length,true);
+    cv.setUint16(28,name.length,true);cv.setUint32(42,offset,true);
+    central.push({header:new Uint8Array(ch),name});
+    offset+=30+name.length+data.length;
+  }
+  const cstart=offset;let csize=0;
+  for(const c of central){chunks.push(c.header,c.name);
+    csize+=46+c.name.length;}
+  const eocd=new ArrayBuffer(22),ev=new DataView(eocd);
+  ev.setUint32(0,0x06054b50,true);
+  ev.setUint16(8,central.length,true);ev.setUint16(10,central.length,true);
+  ev.setUint32(12,csize,true);ev.setUint32(16,cstart,true);
+  chunks.push(new Uint8Array(eocd));
+  let len=0;for(const c of chunks)len+=c.length;
+  const out=new Uint8Array(len);let p=0;
+  for(const c of chunks){out.set(c,p);p+=c.length;}
+  return out;
+}
+
+$("exportZip").addEventListener("click",()=>{
+  if(!S.rois.length){toast("No ROIs to export.");return;}
+  const files=S.rois.map((roi,i)=>{
+    const nm=`lesion_${String(i+1).padStart(2,"0")}`;
+    return {name:nm+".roi",
+            data:makeImageJRoi(roi.pts,nm)};
+  });
+  // a single .roi exports bare; multiple go in a RoiSet.zip
+  if(files.length===1){
+    download(URL.createObjectURL(new Blob([files[0].data])),
+             files[0].name);
+  }else{
+    const zip=makeZip(files);
+    download(URL.createObjectURL(
+      new Blob([zip],{type:"application/zip"})),"RoiSet.zip");
+  }
+  toast(`Exported ${files.length} ImageJ ROI(s).`);
+});
+$("clearBtn").addEventListener("click",()=>{
+  S.rois=[];S.candidates=[];S.selROI=-1;renderROIs();renderCandidates();render();
+});
+function download(uri,name){
+  const a=document.createElement("a");
+  a.href=uri;a.download=name;document.body.appendChild(a);
+  a.click();a.remove();
+}
+
+/* initial paint */
+applyModality("tempC",{skipMap:true});   // unit labels + Swift palette by default
+paintScaleGradient();
+updateScaleVisual();
+renderROIs();
+</script>
+</body>
+</html>
