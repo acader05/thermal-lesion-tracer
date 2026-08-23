@@ -5,6 +5,7 @@ A single-file browser tool for outlining and measuring regions in false-colour t
 Built for an axillary thermography workflow (hidradenitis lesions imaged with a lab thermal scale), but the modality, palette, and value range are all configurable, so it also handles bioluminescence, fluorescence, perfusion, pH, and oxygenation images.
 
 **[Live demo](https://acader05.github.io/thermal-lesion-tracer/)** (see Deployment below)
+
 ![Thermal Lesion Tracer](screenshot.png)
 ---
 
