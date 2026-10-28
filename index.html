@@ -4,9 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Thermal Lesion Tracer</title>
+<meta name="author" content="Atif Cader, Tahirih Nasseri">
 <style>
   /* ---- design language: clinical, light, navy ---- */
-  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
   :root{
     /* brand-neutral palette: clinical navy + cobalt accent */
@@ -14,11 +14,11 @@
     --brand-navy-dk:#1c294a;    /* darker navy                   */
     --brand-mid:#45578b;        /* mid blue-grey                 */
     --brand-soft:#abbad9;       /* light blue-grey               */
-    --brand-blue:#0072ce;       /* bright accent / logo cobalt   */
+    --brand-blue:#005bb5;       /* bright accent / logo cobalt   */
     --brand-green:#00d084;      /* positive / success            */
 
     --bg:#eef1f6;              --panel:#ffffff;        --panel-2:#f4f6fa;
-    --line:#dce1ea;            --ink:#1f2a44;          --ink-dim:#6b7689;
+    --line:#dce1ea;            --ink:#111a2e;          --ink-dim:#3e485b;
     --accent:var(--brand-blue);
     --accent-warm:#e8842b;     --danger:#cf3b3b;
     --good:var(--brand-green); --shadow:0 6px 24px rgba(41,58,105,.10);
@@ -31,10 +31,10 @@
         rgba(41,58,105,.07) 0%, transparent 62%),
       var(--bg);
     color:var(--ink);
-    font-family:'Inter',-apple-system,Segoe UI,Roboto,sans-serif;
+    font-family:Arial,Helvetica,sans-serif;
     font-size:13px; line-height:1.5;
   }
-  h1,h2,.display{font-family:'Inter',sans-serif;font-weight:700;
+  h1,h2,.display{font-family:Arial,Helvetica,sans-serif;font-weight:700;
     letter-spacing:-.01em;}
 
   .wrap{max-width:1600px;margin:0 auto;padding:22px 30px 60px;}
@@ -45,6 +45,7 @@
   /* Swift bolt logo mark */
   .brand-logo{width:34px;height:34px;flex:none;}
   .brand-text{display:flex;flex-direction:column;gap:1px;}
+  .brand-text .byline{font-size:12px;color:var(--ink-dim);font-weight:500;}
   .brand-text .product{font-size:10px;font-weight:600;letter-spacing:.14em;
     text-transform:uppercase;color:var(--brand-blue);}
   .tag{margin-left:auto;font-size:11px;color:var(--brand-navy);font-weight:600;
@@ -85,11 +86,23 @@
   .panel .hint{color:var(--ink-dim);font-size:11px;margin-bottom:12px;}
 
   /* ---- canvas / image stage (kept dark: thermal color reads best) ---- */
+  /* fixed-size viewer; the image scrolls inside it when zoomed in */
   #stageWrap{position:relative;background:#0e1419;
-    border:1px solid var(--line);border-radius:10px;overflow:hidden;
-    min-height:300px;display:flex;align-items:center;justify-content:center;}
-  #stage{display:block;max-width:100%;cursor:crosshair;}
-  #empty{color:#8da0b0;text-align:center;padding:60px 20px;font-size:12px;}
+    border:1px solid var(--line);border-radius:10px;overflow:auto;
+    height:calc(100vh - 250px);min-height:320px;display:flex;}
+  @media(max-width:1100px){#stageWrap{height:60vh;}}
+  #stage{display:block;flex:none;margin:auto;cursor:crosshair;}
+  #stage.pan{cursor:grab;}
+  #stage.panning{cursor:grabbing;}
+  #empty{color:#8da0b0;text-align:center;padding:60px 20px;font-size:12px;
+    margin:auto;}
+  .view-bar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+    margin-bottom:10px;}
+  .view-bar .seg button{padding:6px 12px;}
+  .view-bar .zbtn{padding:5px 11px;font-size:14px;line-height:1;}
+  .view-bar #zoomVal{min-width:46px;text-align:center;font-weight:600;
+    color:var(--brand-navy);}
+  .view-bar .note{margin:0 0 0 auto;}
   #empty b{color:#e8eef3;font-weight:700;font-size:16px;
     display:block;margin-bottom:6px;}
 
@@ -240,13 +253,38 @@
   .cp-foot{display:flex;align-items:center;gap:8px;margin-top:10px;}
   .cp-preview{width:24px;height:24px;border-radius:6px;border:1px solid var(--line);
     flex:none;}
-  .cp-hex{font-size:12px;font-family:ui-monospace,Menlo,monospace;
+  .cp-hex{font-size:12px;font-family:Arial,Helvetica,sans-serif;
     color:var(--ink-dim);flex:1;}
   .cp-foot button{padding:6px 12px;}
   .pal-tag{margin-left:auto;font-size:10px;font-weight:600;padding:2px 8px;
     border-radius:20px;background:var(--panel-2);border:1px solid var(--line);
     color:var(--ink-dim);}
   .pal-tag.custom{color:var(--accent);border-color:var(--accent);}
+
+  /* ---- settings bar + step-by-step workflow (left column) ---- */
+  .settings-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+    margin-bottom:12px;padding:9px 11px;background:var(--panel);
+    border:1px solid var(--line);border-radius:10px;box-shadow:var(--shadow);}
+  .settings-bar .lab{font-weight:700;color:var(--brand-navy);margin-right:4px;}
+  .settings-bar button{padding:6px 10px;}
+  .settings-bar .note{margin:2px 0 0;flex-basis:100%;}
+  .step{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+    box-shadow:var(--shadow);margin-bottom:10px;}
+  .step-head{display:flex;align-items:center;gap:6px;width:100%;
+    padding:12px 14px;border:0;border-radius:12px;background:none;
+    text-align:left;font-size:14px;font-weight:700;color:var(--ink);}
+  .step-head:hover{color:var(--ink);background:var(--panel-2);}
+  .step-head .sum{margin-left:auto;font-size:11px;font-weight:500;
+    color:var(--ink-dim);text-align:right;}
+  .step-head .chev{font-size:11px;color:var(--ink-dim);margin-left:6px;
+    transition:transform .15s;}
+  .step.open .step-head .chev{transform:rotate(90deg);}
+  .step-body{display:none;padding:2px 16px 16px;}
+  .step.open .step-body{display:block;}
+  .step-foot{display:flex;justify-content:flex-end;margin-top:12px;}
+  .step-foot button{padding:6px 14px;}
+  details.pal-edit summary{cursor:pointer;font-weight:600;color:var(--brand-navy);
+    margin:8px 0 4px;font-size:12px;}
 </style>
 </head>
 <body>
@@ -273,167 +311,246 @@
     <div class="brand-text">
       <span class="product">Open Clinical Imaging</span>
       <h1>Thermal Lesion Tracer</h1>
+      <span class="byline">Co-developed by Atif Cader and Tahirih Nasseri</span>
     </div>
     <span class="tag">Open-source imaging tool</span>
   </header>
 
   <div class="layout">
-    <!-- ============ LEFT: all settings ============ -->
+    <!-- ============ LEFT: workflow steps ============ -->
     <div class="settings-col">
 
-      <!-- ===== modality + live scale + palette (same area) ===== -->
-      <div class="panel">
-        <h2><span class="step-num">1</span>Modality, threshold &amp; palette</h2>
-        <div class="row">
-          <label>Modality</label>
-          <select id="modality" style="flex:1;min-width:160px;">
-            <option value="tempC">Temperature (&deg;C)</option>
-            <option value="tempF">Temperature (&deg;F)</option>
-            <option value="biolum">Bioluminescence (p/s/cm&sup2;/sr)</option>
-            <option value="fluor">Fluorescence (a.u.)</option>
-            <option value="perfusion">Perfusion (PU)</option>
-            <option value="ph">pH</option>
-            <option value="oxy">Oxygenation (%StO&#8322;)</option>
-            <option value="generic">Generic intensity (a.u.)</option>
-            <option value="custom">Custom&hellip;</option>
-          </select>
-        </div>
-        <div class="row" id="customRow" style="display:none;">
-          <label>Name</label>
-          <input type="text" id="customName" placeholder="Quantity" style="width:96px;">
-          <label>Unit</label>
-          <input type="text" id="customUnit" placeholder="a.u." style="width:66px;">
-        </div>
-        <div class="hint">Drag the white handle left/right. Everything at or
-          above the handle value is highlighted on the image, live.</div>
+      <div class="settings-bar">
+        <span class="lab">Settings</span>
+        <button id="saveSettings">Save to file</button>
+        <button class="filebtn">Load from file
+          <input type="file" id="loadSettings" accept=".json,application/json">
+        </button>
+        <button id="resetSettings">Reset to defaults</button>
+        <span class="note">Scale, palette, range, threshold, smoothing and
+          sticker size are also remembered in this browser between sessions.</span>
+      </div>
 
-        <div class="scale-block">
-          <div class="scale-readout">
-            <span class="lbl">outlining regions &ge;</span>
-            <span class="big"><span id="thrVal">1.5</span>
-              <span id="thrUnit">&deg;C</span></span>
+      <!-- ===== 1. load image ===== -->
+      <div class="step open" data-step="1">
+        <button type="button" class="step-head"><span class="step-num">1</span>
+          Load image<span class="sum" id="sum1"></span><span class="chev">&#9654;</span></button>
+        <div class="step-body">
+          <div class="hint">A false-colour screenshot (PNG or JPEG) with the
+            colour scale in view.</div>
+          <div class="row">
+            <button class="filebtn primary">Load image
+              <input type="file" id="fileIn" accept="image/*">
+            </button>
+            <button id="newFileBtn" class="danger">New file</button>
+            <span id="fileName" class="note" style="margin:0;"></span>
           </div>
-          <div id="scaleBar">
-            <div id="scaleGrad"></div>
-            <div id="scaleMask"></div>
-            <div id="scaleHandle"></div>
-          </div>
-          <div class="scale-ticks" id="scaleTicks"></div>
-        </div>
-
-        <div class="row" style="margin-top:14px;">
-          <label>Range</label>
-          <input type="number" id="tMin" value="-5" step="0.5"> to
-          <input type="number" id="tMax" value="5" step="0.5">
-          <span id="rangeUnit">&deg;C</span>
-          <button id="reverseBtn">Reverse</button>
-        </div>
-        <div class="row">
-          <label>Smoothing</label>
-          <input type="range" id="smoothR" min="0" max="6" step="0.5" value="2">
-          <span id="smoothV" class="note" style="margin:0;width:24px;">2</span>
-          <label>Min size px</label>
-          <input type="number" id="minSize" value="120" step="10">
-        </div>
-        <div class="note">Smoothing rounds the outlines (natural wounds are not
-          jagged) and suppresses small thermal speckle artifacts.</div>
-
-        <!-- palette editor lives right beside the scale it controls -->
-        <div class="divider"></div>
-        <div class="sub-head">Colour palette
-          <span class="pal-tag" id="palTag">Swift</span></div>
-        <div class="hint">Swift is the default scale. Pick another preset, or edit
-          2&ndash;12 stops (tap a circle) and <b>Apply</b>.</div>
-        <div class="row">
-          <label>Preset</label>
-          <select id="palettePreset" style="flex:1;">
-            <option value="swift">Swift (lab thermal scale)</option>
-            <option value="jet">Jet</option>
-            <option value="iron">Iron</option>
-            <option value="inferno">Inferno</option>
-            <option value="viridis">Viridis</option>
-            <option value="grayscale">Grayscale</option>
-          </select>
-        </div>
-        <div class="pal-stops" id="paletteStops"></div>
-        <div class="row" style="margin-top:8px;">
-          <button id="addStop">+ Stop</button>
-          <button id="removeStop">&minus; Stop</button>
-        </div>
-        <div class="pal-preview" id="palettePreview"></div>
-        <div class="row">
-          <button id="applyPalette" class="primary" style="flex:1;">
-            Apply palette</button>
+          <div class="note">New file clears the image and lesions but keeps
+            your settings.</div>
         </div>
       </div>
 
-      <div class="panel">
-        <h2><span class="step-num">2</span>Detected regions</h2>
-        <div class="hint">Auto-traced from the current threshold. Keep the
-          real lesions, drop the artifacts.</div>
-        <div class="row">
-          <button id="detectBtn" class="primary" style="flex:1;">
-            Detect at current threshold</button>
-        </div>
-        <div id="candArea"></div>
-      </div>
-
-      <div class="panel">
-        <h2><span class="step-num">3</span>ROI list</h2>
-        <div class="hint">Click a row to highlight that lesion on the image.
-          Step through with the arrows.</div>
-        <div class="roi-nav">
-          <button id="roiPrev">&larr; Prev</button>
-          <span class="count" id="roiCount">No ROIs</span>
-          <button id="roiNext">Next &rarr;</button>
-        </div>
-        <label class="cs-toggle" style="margin:2px 0 6px;">
-          <input type="checkbox" id="showNums" checked> Show lesion numbers on image
-        </label>
-        <div id="roiList" class="roi-list">
-          <div class="note">No ROIs yet.</div>
-        </div>
-
-        <!-- per-ROI appearance controls (for the selected lesion) -->
-        <div id="styleBox" class="style-box" style="display:none;">
-          <div class="style-title">Appearance &mdash; Lesion
-            <span id="styleNum">1</span></div>
+      <!-- ===== 2. scale: modality, range, palette ===== -->
+      <div class="step open" data-step="2">
+        <button type="button" class="step-head"><span class="step-num">2</span>
+          Scale<span class="sum" id="sum2"></span><span class="chev">&#9654;</span></button>
+        <div class="step-body">
+          <div class="hint">Match these to the colour scale in the image.</div>
           <div class="row">
-            <label>Stroke</label>
-            <button type="button" id="styleColor" class="swatch lg"
-                    style="background:#5fbf7d"></button>
-            <label>Width</label>
-            <input type="range" id="styleWidth" min="1" max="8"
-                   step="0.5" value="2.4">
-            <span id="styleWidthV" class="mini">2.4</span>
+            <label>Modality</label>
+            <select id="modality" style="flex:1;min-width:160px;">
+              <option value="tempC">Temperature (&deg;C)</option>
+              <option value="tempF">Temperature (&deg;F)</option>
+              <option value="biolum">Bioluminescence (p/s/cm&sup2;/sr)</option>
+              <option value="fluor">Fluorescence (a.u.)</option>
+              <option value="perfusion">Perfusion (PU)</option>
+              <option value="ph">pH</option>
+              <option value="oxy">Oxygenation (%StO&#8322;)</option>
+              <option value="generic">Generic intensity (a.u.)</option>
+              <option value="custom">Custom&hellip;</option>
+            </select>
+          </div>
+          <div class="row" id="customRow" style="display:none;">
+            <label>Name</label>
+            <input type="text" id="customName" placeholder="Quantity" style="width:96px;">
+            <label>Unit</label>
+            <input type="text" id="customUnit" placeholder="a.u." style="width:66px;">
           </div>
           <div class="row">
-            <label>Fill</label>
-            <div class="seg" style="flex:1;">
-              <button id="fillNone" class="active">None</button>
-              <button id="fillLight">Light</button>
-              <button id="fillMed">Medium</button>
-              <button id="fillSolid">Solid</button>
+            <label>Range</label>
+            <input type="number" id="tMin" value="-5" step="0.5"> to
+            <input type="number" id="tMax" value="5" step="0.5">
+            <span id="rangeUnit">&deg;C</span>
+          </div>
+          <div class="note" style="margin-top:0;">If the image's scale runs hot
+            to cold, type the range backwards (e.g. 5 to -5).</div>
+
+          <div class="divider"></div>
+          <div class="sub-head">Colour palette
+            <span class="pal-tag" id="palTag">Swift</span></div>
+          <div class="row">
+            <label>Preset</label>
+            <select id="palettePreset" style="flex:1;">
+              <option value="swift">Swift (lab thermal scale)</option>
+              <option value="jet">Jet</option>
+              <option value="iron">Iron</option>
+              <option value="inferno">Inferno</option>
+              <option value="viridis">Viridis</option>
+              <option value="grayscale">Grayscale</option>
+            </select>
+          </div>
+          <div class="pal-preview" id="palettePreview"></div>
+          <details class="pal-edit">
+            <summary>Edit palette stops</summary>
+            <div class="hint" style="margin-bottom:6px;">Edit 2&ndash;12 stops
+              (tap a circle), then <b>Apply</b>.</div>
+            <div class="pal-stops" id="paletteStops"></div>
+            <div class="row" style="margin-top:8px;">
+              <button id="addStop">+ Stop</button>
+              <button id="removeStop">&minus; Stop</button>
+              <button id="applyPalette" class="primary" style="flex:1;">
+                Apply palette</button>
+            </div>
+          </details>
+        </div>
+      </div>
+
+      <!-- ===== 3. calibrate ===== -->
+      <div class="step open" data-step="3">
+        <button type="button" class="step-head"><span class="step-num">3</span>
+          Calibrate<span class="sum" id="sum3"></span><span class="chev">&#9654;</span></button>
+        <div class="step-body">
+          <div class="hint">Optional. Click both edges of the sticker on the
+            image to get areas in cm&sup2; instead of pixels.</div>
+          <div class="row">
+            <label>Sticker &Oslash;</label>
+            <input type="number" id="calMM" value="10" step="0.5"> mm
+            <button id="modeCal" data-mode="cal">Click sticker edges</button>
+            <span class="tb-scale"><span id="pxPerMM">&mdash;</span> px/mm</span>
+          </div>
+          <div id="calNote" class="note">
+            No calibration set &mdash; areas will be reported in pixels only.
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== 4. find lesions ===== -->
+      <div class="step open" data-step="4">
+        <button type="button" class="step-head"><span class="step-num">4</span>
+          Find lesions<span class="sum" id="sum4"></span><span class="chev">&#9654;</span></button>
+        <div class="step-body">
+          <div class="hint">Drag the handle. Everything at or above it is
+            highlighted on the image, live.</div>
+          <div class="scale-block">
+            <div class="scale-readout">
+              <span class="lbl">outlining regions &ge;</span>
+              <span class="big"><span id="thrVal">1.5</span>
+                <span id="thrUnit">&deg;C</span></span>
+            </div>
+            <div id="scaleBar">
+              <div id="scaleGrad"></div>
+              <div id="scaleMask"></div>
+              <div id="scaleHandle"></div>
+            </div>
+            <div class="scale-ticks" id="scaleTicks"></div>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <label>Smoothing</label>
+            <input type="range" id="smoothR" min="0" max="6" step="0.5" value="2">
+            <span id="smoothV" class="note" style="margin:0;width:24px;">2</span>
+            <label>Min size px</label>
+            <input type="number" id="minSize" value="120" step="10">
+          </div>
+          <div class="note">Smoothing rounds the outlines (natural wounds are not
+            jagged) and suppresses small thermal speckle artifacts.</div>
+          <div class="row" style="margin-top:10px;">
+            <button id="detectBtn" class="primary" style="flex:1;">
+              Detect at current threshold</button>
+            <button id="modeDraw" data-mode="draw">Draw by hand</button>
+          </div>
+          <div id="candArea"></div>
+        </div>
+      </div>
+
+      <!-- ===== 5. lesions + style ===== -->
+      <div class="step open" data-step="5">
+        <button type="button" class="step-head"><span class="step-num">5</span>
+          Lesions<span class="sum" id="sum5"></span><span class="chev">&#9654;</span></button>
+        <div class="step-body">
+          <div class="hint">Click a row to highlight that lesion on the image.
+            Step through with the arrows.</div>
+          <div class="roi-nav">
+            <button id="roiPrev">&larr; Prev</button>
+            <span class="count" id="roiCount">No ROIs</span>
+            <button id="roiNext">Next &rarr;</button>
+          </div>
+          <label class="cs-toggle" style="margin:2px 0 6px;">
+            <input type="checkbox" id="showNums" checked> Show lesion numbers on image
+          </label>
+          <div id="roiList" class="roi-list">
+            <div class="note">No ROIs yet.</div>
+          </div>
+
+          <!-- per-ROI appearance controls (for the selected lesion) -->
+          <div id="styleBox" class="style-box" style="display:none;">
+            <div class="style-title">Appearance &mdash; Lesion
+              <span id="styleNum">1</span></div>
+            <div class="row">
+              <label>Stroke</label>
+              <button type="button" id="styleColor" class="swatch lg"
+                      style="background:#5fbf7d"></button>
+              <label>Width</label>
+              <input type="range" id="styleWidth" min="1" max="8"
+                     step="0.5" value="2.4">
+              <span id="styleWidthV" class="mini">2.4</span>
+            </div>
+            <div class="row">
+              <label>Fill</label>
+              <div class="seg" style="flex:1;">
+                <button id="fillNone" class="active">None</button>
+                <button id="fillLight">Light</button>
+                <button id="fillMed">Medium</button>
+                <button id="fillSolid">Solid</button>
+              </div>
+            </div>
+            <div class="row">
+              <button id="applyAll" style="flex:1;">Apply this style to all</button>
             </div>
           </div>
-          <div class="row">
-            <button id="applyAll" style="flex:1;">Apply this style to all</button>
+          <div class="row" style="margin-top:10px;">
+            <button id="clearBtn" class="danger">Clear all lesions</button>
           </div>
         </div>
+      </div>
 
-        <div class="divider"></div>
-        <div class="row">
-          <button id="exportImg" style="flex:1;">Overlay PNG</button>
-          <button id="exportCsv" style="flex:1;">Measurements CSV</button>
+      <!-- ===== 6. export ===== -->
+      <div class="step open" data-step="6">
+        <button type="button" class="step-head"><span class="step-num">6</span>
+          Export<span class="sum" id="sum6"></span><span class="chev">&#9654;</span></button>
+        <div class="step-body">
+          <div class="stat-grid">
+            <div class="stat"><div class="k">Lesions</div>
+              <div class="v" id="exCount">0</div></div>
+            <div class="stat"><div class="k" id="exDeltaLabel">&Delta; max</div>
+              <div class="v" id="exDeltaMax">&mdash;</div></div>
+            <div class="stat"><div class="k">Total area</div>
+              <div class="v" id="exTotalArea">&mdash;</div></div>
+            <div class="stat"><div class="k">Total perimeter</div>
+              <div class="v" id="exTotalPerim">&mdash;</div></div>
+          </div>
+          <div class="row" style="margin-top:12px;">
+            <button id="exportImg" style="flex:1;">Overlay PNG</button>
+            <button id="exportCsv" style="flex:1;">Measurements CSV</button>
+          </div>
+          <div class="row">
+            <button id="exportZip" class="primary" style="flex:1;">
+              ImageJ RoiSet.zip</button>
+          </div>
+          <div class="note">The CSV has one row per lesion plus a summary row
+            with the totals above. RoiSet.zip opens directly in ImageJ:
+            ROI&nbsp;Manager &rarr; More &rarr; Open. Each lesion is a
+            standard <b>.roi</b> polygon inside the zip.</div>
         </div>
-        <div class="row">
-          <button id="exportZip" class="primary" style="flex:1;">
-            ImageJ RoiSet.zip</button>
-          <button id="clearBtn" class="danger">Clear all</button>
-        </div>
-        <div class="note">RoiSet.zip opens directly in ImageJ:
-          ROI&nbsp;Manager &rarr; More &rarr; Open. Each lesion is a
-          standard <b>.roi</b> polygon inside the zip.</div>
       </div>
     </div>
 
@@ -459,51 +576,28 @@
       </div>
 
       <div class="panel">
-        <h2><span class="step-num">&#9656;</span>Image preview</h2>
-        <div class="hint">Load a false-color image with an embedded colorbar.</div>
-        <div class="row">
-          <button class="filebtn primary">Load image
-            <input type="file" id="fileIn" accept="image/*">
-          </button>
-          <button id="newFileBtn" class="danger">New file</button>
-          <span id="fileName" class="note" style="margin:0;"></span>
-        </div>
-
-        <!-- toolbar directly above the image: mode + calibration -->
-        <div class="img-toolbar">
+        <div class="view-bar">
           <div class="seg">
-            <button id="modeView" class="active">View</button>
-            <button id="modeCal">Calibrate</button>
-            <button id="modeDraw">Draw lesion</button>
+            <button id="zoomFit" class="active">Fit</button>
+            <button id="zoomActual">Actual size</button>
           </div>
-          <div class="tb-cal">
-            <label>Sticker &Oslash;</label>
-            <input type="number" id="calMM" value="10" step="0.5"> mm
-          </div>
-          <span class="spacer"></span>
-          <span class="tb-scale"><span id="pxPerMM">&mdash;</span> px/mm</span>
+          <button id="zoomOut" class="zbtn" aria-label="Zoom out">&minus;</button>
+          <span id="zoomVal">&mdash;</span>
+          <button id="zoomIn" class="zbtn" aria-label="Zoom in">+</button>
+          <span class="note">Ctrl + scroll to zoom &middot; drag to pan</span>
         </div>
-
-        <div id="stageWrap" class="has-toolbar">
+        <div id="stageWrap">
           <div id="empty"><b>No image loaded</b>
-            Load a thermal image to begin tracing.</div>
+            Load a thermal image in step 1 to begin tracing.</div>
           <canvas id="stage" style="display:none;"></canvas>
         </div>
-
         <div id="modeHelp" class="note" style="margin-top:8px;">
-          View mode: pan/inspect. Use the toolbar to calibrate scale or hand-draw.
-        </div>
-        <div id="calNote" class="note" style="margin-top:2px;">
-          No calibration set &mdash; areas will be reported in pixels only.
+          View mode: inspect the image and the live highlight.
         </div>
       </div>
     </div>
   </div>
 
-  <footer class="app-footer">
-    Thermal Lesion Tracer &middot; Open-source clinical imaging tool &middot;
-    Created by <strong>Atif Cader</strong>
-  </footer>
 </div>
 
 <!-- lightweight color picker (swatches + HSV wheel; no OS picker / dropper) -->
@@ -539,10 +633,13 @@ const toast = (msg)=>{const t=$("toast");t.textContent=msg;t.classList.add("show
 const S = {
   img:null,                 // HTMLImageElement
   iw:0, ih:0,               // natural image size
-  view:{x:0,y:0,scale:1},   // canvas display transform
+  view:{x:0,y:0,scale:1,fit:true,fitScale:1},  // canvas display transform
   lut:null,                 // [{r,g,b}] cold->hot, sampled from colorbar
   tMin:-5, tMax:5,
   tempMap:null,             // Float32Array iw*ih  (temperature per pixel)
+  idxMap:null,              // matched scale position per pixel (0..255)
+  lutN:256,                 // number of colours in the scale
+  mVer:0,                   // bumps when stored measurements go stale
   validMask:null,           // Uint8 iw*ih (1 = on the colormap)
   barBox:null,              // {x0,y0,x1,y1} detected colorbar
   threshold:1.5,
@@ -705,29 +802,42 @@ function sampleColorbar(data,w,box,n=256){
    2. TEMPERATURE MAP  -- nearest colorbar color for every pixel
    ===================================================================== */
 function buildTempMap(){
-  const {iw,ih,lut,tMin,tMax}=S;
+  matchColors();
+  applyRange();
+}
+/* nearest scale colour for every pixel (the slow part). Answers are
+   cached per colour, since thermal screenshots reuse a limited set. */
+function matchColors(){
+  const {iw,ih,lut}=S;
   const off=document.createElement("canvas");
   off.width=iw;off.height=ih;
   const ctx=off.getContext("2d",{willReadFrequently:true});
   ctx.drawImage(S.img,0,0);
   const data=ctx.getImageData(0,0,iw,ih).data;
 
-  const temp=new Float32Array(iw*ih);
-  const valid=new Uint8Array(iw*ih);
   const n=lut.length;
+  const idx=(n<=256)?new Uint8Array(iw*ih):new Uint16Array(iw*ih);
+  const valid=new Uint8Array(iw*ih);
   const lr=new Float32Array(n),lg=new Float32Array(n),lb=new Float32Array(n);
   for(let k=0;k<n;k++){lr[k]=lut[k].r;lg[k]=lut[k].g;lb[k]=lut[k].b;}
 
+  const cache=new Map(), CACHE_MAX=300000;   // cap keeps memory bounded
   for(let p=0;p<iw*ih;p++){
     const i=p*4,r=data[i],g=data[i+1],b=data[i+2];
-    let bd=1e9,bi=0;
-    for(let k=0;k<n;k++){
-      const dr=r-lr[k],dg=g-lg[k],db=b-lb[k];
-      const d=dr*dr+dg*dg+db*db;
-      if(d<bd){bd=d;bi=k;}
+    const key=(r<<16)|(g<<8)|b;
+    let hit=cache.get(key);
+    if(hit===undefined){
+      let bd=1e9,bi=0;
+      for(let k=0;k<n;k++){
+        const dr=r-lr[k],dg=g-lg[k],db=b-lb[k];
+        const d=dr*dr+dg*dg+db*db;
+        if(d<bd){bd=d;bi=k;}
+      }
+      hit=bi*2+((bd<=60*60)?1:0);          // far from colormap -> reject
+      if(cache.size<CACHE_MAX)cache.set(key,hit);
     }
-    temp[p]=tMin+(bi/(n-1))*(tMax-tMin);
-    valid[p]=(bd<=60*60)?1:0;            // far from colormap -> reject
+    idx[p]=hit>>1;
+    valid[p]=hit&1;
   }
   // exclude the colorbar strip itself
   if(S.barBox){
@@ -735,7 +845,17 @@ function buildTempMap(){
     for(let y=Math.max(0,y0-8);y<=Math.min(ih-1,y1+4);y++)
       for(let x=x0;x<=x1;x++) valid[y*iw+x]=0;
   }
-  S.tempMap=temp;S.validMask=valid;
+  S.idxMap=idx;S.validMask=valid;S.lutN=n;
+}
+/* turn scale positions into values for the current min/max range.
+   Cheap, so changing the range doesn't redo the colour search. */
+function applyRange(){
+  const {idxMap,lutN,tMin,tMax}=S, N=idxMap.length;
+  const temp=(S.tempMap&&S.tempMap.length===N)?S.tempMap:new Float32Array(N);
+  const step=(tMax-tMin)/(lutN-1);
+  for(let p=0;p<N;p++)temp[p]=tMin+idxMap[p]*step;
+  S.tempMap=temp;
+  S.mVer++;                                // stored measurements are stale
 }
 
 /* =====================================================================
@@ -747,16 +867,14 @@ function buildHighlight(){
   if(!S.hiCanvas){
     S.hiCanvas=document.createElement("canvas");
     S.hiCanvas.width=iw;S.hiCanvas.height=ih;
+    // one reusable buffer: white everywhere, only the alpha changes
+    S.hiCanvas._img=S.hiCanvas.getContext("2d").createImageData(iw,ih);
+    S.hiCanvas._img.data.fill(255);
   }
   const ctx=S.hiCanvas.getContext("2d");
-  const img=ctx.createImageData(iw,ih);
-  const d=img.data;
-  for(let p=0;p<iw*ih;p++){
-    if(validMask[p] && tempMap[p]>=threshold){
-      const i=p*4;
-      d[i]=255;d[i+1]=255;d[i+2]=255;d[i+3]=110;   // soft white wash
-    }
-  }
+  const img=S.hiCanvas._img, d=img.data;
+  for(let p=0,i=3;p<iw*ih;p++,i+=4)
+    d[i]=(validMask[p] && tempMap[p]>=threshold)?110:0;   // soft white wash
   ctx.putImageData(img,0,0);
   render();
 }
@@ -935,6 +1053,12 @@ function measureROI(pts){
   }
   return out;
 }
+/* measurements are stored on each ROI/candidate and only redone when
+   the value map or calibration changes (S.mVer bumps) */
+function getM(o){
+  if(!o._m||o._mVer!==S.mVer){o._m=measureROI(o.pts);o._mVer=S.mVer;}
+  return o._m;
+}
 function pointInPoly(x,y,pts){
   let inside=false;
   for(let i=0,j=pts.length-1;i<pts.length;j=i++){
@@ -949,13 +1073,73 @@ function pointInPoly(x,y,pts){
    ===================================================================== */
 const stage=$("stage"), sctx=stage.getContext("2d");
 
+/* ---- viewer zoom ----
+   "Fit" shows the whole image inside the viewer box. Zooming in makes
+   the canvas bigger than the box, which then scrolls (or drag to pan). */
 function fitView(){
-  const wrapW=$("stageWrap").clientWidth-2;
-  const scale=Math.min(1,wrapW/S.iw);
-  stage.width=Math.round(S.iw*scale);
-  stage.height=Math.round(S.ih*scale);
-  S.view.scale=scale;
+  const wrap=$("stageWrap");
+  S.view.fitScale=Math.min(1,(wrap.clientWidth-2)/S.iw,
+                             (wrap.clientHeight-2)/S.ih);
+  if(S.view.fit)S.view.scale=S.view.fitScale;
+  applyViewScale();
 }
+function applyViewScale(){
+  stage.width=Math.max(1,Math.round(S.iw*S.view.scale));
+  stage.height=Math.max(1,Math.round(S.ih*S.view.scale));
+  $("zoomVal").textContent=Math.round(S.view.scale*100)+"%";
+  $("zoomFit").classList.toggle("active",S.view.fit);
+  $("zoomActual").classList.toggle("active",
+    !S.view.fit&&Math.abs(S.view.scale-1)<1e-6);
+  stage.classList.toggle("pan",S.mode==="view"&&
+    (stage.width>$("stageWrap").clientWidth||
+     stage.height>$("stageWrap").clientHeight));
+}
+// ax, ay: point inside the viewer to zoom around (defaults to the centre)
+function setZoom(z,ax,ay){
+  if(!S.img)return;
+  const wrap=$("stageWrap");
+  if(ax==null){ax=wrap.clientWidth/2;ay=wrap.clientHeight/2;}
+  const fx=(wrap.scrollLeft+ax-stage.offsetLeft)/stage.width;
+  const fy=(wrap.scrollTop+ay-stage.offsetTop)/stage.height;
+  const maxZ=Math.max(1,Math.min(4,8000/Math.max(S.iw,S.ih)));  // canvas size cap
+  S.view.scale=Math.max(S.view.fitScale,Math.min(maxZ,z));
+  S.view.fit=Math.abs(S.view.scale-S.view.fitScale)<1e-6;
+  applyViewScale();render();
+  wrap.scrollLeft=fx*stage.width+stage.offsetLeft-ax;
+  wrap.scrollTop=fy*stage.height+stage.offsetTop-ay;
+}
+$("zoomFit").addEventListener("click",()=>{
+  if(!S.img)return;
+  S.view.fit=true;fitView();render();
+});
+$("zoomActual").addEventListener("click",()=>setZoom(1));
+$("zoomIn").addEventListener("click",()=>setZoom(S.view.scale*1.5));
+$("zoomOut").addEventListener("click",()=>setZoom(S.view.scale/1.5));
+// Ctrl/Cmd + scroll zooms around the pointer
+$("stageWrap").addEventListener("wheel",e=>{
+  if(!S.img||!(e.ctrlKey||e.metaKey))return;
+  e.preventDefault();
+  const r=$("stageWrap").getBoundingClientRect();
+  setZoom(S.view.scale*(e.deltaY<0?1.2:1/1.2),e.clientX-r.left,e.clientY-r.top);
+},{passive:false});
+// in View mode, drag the image to pan when it's bigger than the viewer
+(function initPan(){
+  let p=null;
+  stage.addEventListener("mousedown",e=>{
+    if(S.mode!=="view"||!stage.classList.contains("pan"))return;
+    const w=$("stageWrap");
+    p={x:e.clientX,y:e.clientY,sl:w.scrollLeft,st:w.scrollTop};
+    stage.classList.add("panning");e.preventDefault();
+  });
+  window.addEventListener("mousemove",e=>{
+    if(!p)return;
+    const w=$("stageWrap");
+    w.scrollLeft=p.sl-(e.clientX-p.x);w.scrollTop=p.st-(e.clientY-p.y);
+  });
+  window.addEventListener("mouseup",()=>{
+    if(p){p=null;stage.classList.remove("panning");}
+  });
+})();
 function render(){
   if(!S.img)return;
   const {scale}=S.view;
@@ -981,7 +1165,7 @@ function render(){
     if(S.showNums){
       const c=centroid(roi.pts);
       sctx.fillStyle="#fff";
-      sctx.font=(sel?"600 18px ":"600 14px ")+"'Spline Sans Mono'";
+      sctx.font=(sel?"bold 18px ":"bold 14px ")+"Arial";
       sctx.strokeStyle="rgba(0,0,0,.75)";sctx.lineWidth=3.5;
       sctx.strokeText(idx+1,c[0]*scale,c[1]*scale);
       sctx.fillText(idx+1,c[0]*scale,c[1]*scale);
@@ -1066,14 +1250,37 @@ function paintScaleGradient(){
 function updateScaleVisual(){
   const f=(S.threshold-S.tMin)/(S.tMax-S.tMin);
   const cl=Math.min(1,Math.max(0,f));
-  $("scaleMask").style.width=(cl*100)+"%";
+  // shade the side holding values below the threshold
+  // (the left normally, the right when the range is typed backwards)
+  const mask=$("scaleMask");
+  if(S.tMax>=S.tMin){
+    mask.style.left="0";mask.style.width=(cl*100)+"%";
+    mask.style.borderRadius="6px 0 0 6px";
+    mask.style.borderRight="2px solid var(--brand-navy)";mask.style.borderLeft="0";
+  }else{
+    mask.style.left=(cl*100)+"%";mask.style.width=((1-cl)*100)+"%";
+    mask.style.borderRadius="0 6px 6px 0";
+    mask.style.borderLeft="2px solid var(--brand-navy)";mask.style.borderRight="0";
+  }
   $("scaleHandle").style.left=(cl*100)+"%";
   $("thrVal").textContent=(Math.round(S.threshold*10)/10);
 }
+// the range can be typed backwards, so clamp between the smaller and larger end
+function clampToRange(t){
+  const lo=Math.min(S.tMin,S.tMax), hi=Math.max(S.tMin,S.tMax);
+  return Math.min(hi,Math.max(lo,t));
+}
 function setThreshold(t,live){
-  S.threshold=Math.min(S.tMax,Math.max(S.tMin,t));
+  S.threshold=clampToRange(t);
   updateScaleVisual();
-  if(live && S.tempMap) buildHighlight();   // <-- continuous update on drag
+  settingsChanged();
+  if(live && S.tempMap) scheduleHighlight();   // live update while dragging
+}
+// redraw the highlight at most once per screen frame
+function scheduleHighlight(){
+  if(S._hiPending)return;
+  S._hiPending=true;
+  requestAnimationFrame(()=>{S._hiPending=false;buildHighlight();});
 }
 
 (function initScaleDrag(){
@@ -1124,15 +1331,16 @@ $("fileIn").addEventListener("change",e=>{
     S.hiCanvas=null;S.pxPerMM=0;$("pxPerMM").textContent="\u2014";
     $("calNote").textContent="No calibration set \u2014 areas in pixels only.";
     $("empty").style.display="none";stage.style.display="block";
-    fitView();
+    S.view.fit=true;fitView();
 
     // use the current palette (Swift by default) as the value scale
-    if(!S.lut) S.lut=paletteToLut(S.paletteStops);
+    if(!S.lut) S.lut=paletteToLut(S.appliedStops||S.paletteStops);
     paintScaleGradient();
     buildTempMap();
     setThreshold(S.threshold,false);
     buildHighlight();
     renderROIs();
+    updateStepSummaries();openStep(2);
     toast("Image loaded \u2014 using the "+$("palTag").textContent+" scale.");
   };
   img.src=URL.createObjectURL(f);
@@ -1143,9 +1351,8 @@ window.addEventListener("resize",()=>{if(S.img){fitView();render();}});
 /* mode switching */
 function setMode(m){
   S.mode=m;
-  $("modeView").classList.toggle("active",m==="view");
-  $("modeCal").classList.toggle("active",m==="cal");
-  $("modeDraw").classList.toggle("active",m==="draw");
+  document.querySelectorAll("[data-mode]").forEach(b=>
+    b.classList.toggle("active",b.dataset.mode===m));
   const help={
     view:"View mode: inspect the image and the live highlight.",
     cal :"Calibrate mode: click the two opposite edges of the 1 cm sticker.",
@@ -1155,11 +1362,12 @@ function setMode(m){
   $("modeHelp").textContent=help[m];
   if(m!=="cal")S.calPts=[];
   if(m!=="draw")S.drawPts=[];
+  if(S.img)applyViewScale();
   render();
 }
-$("modeView").onclick=()=>setMode("view");
-$("modeCal").onclick =()=>setMode("cal");
-$("modeDraw").onclick=()=>setMode("draw");
+// Calibrate and Draw are toggles; clicking again returns to View mode
+$("modeCal").onclick =()=>setMode(S.mode==="cal"?"view":"cal");
+$("modeDraw").onclick=()=>setMode(S.mode==="draw"?"view":"draw");
 
 /* clicks on the image */
 stage.addEventListener("click",e=>{
@@ -1174,13 +1382,15 @@ stage.addEventListener("click",e=>{
       const d=Math.hypot(S.calPts[0][0]-S.calPts[1][0],
                           S.calPts[0][1]-S.calPts[1][1]);
       const mm=parseFloat($("calMM").value)||10;
-      S.pxPerMM=d/mm;
+      S.pxPerMM=d/mm;S.mVer++;
       $("pxPerMM").textContent=S.pxPerMM.toFixed(2);
       $("calNote").textContent=
         `Set from a ${d.toFixed(1)} px line = ${mm} mm. `+
         `Areas now in cm\u00b2.`;
       toast("Measurement scale calibrated.");
-      renderROIs();
+      renderROIs();settingsChanged();
+      setMode("view");openStep(4);
+      return;
     }else if(S.calPts.length>2){
       S.calPts=[[x,y]];
     }
@@ -1199,6 +1409,9 @@ stage.addEventListener("click",e=>{
   }
 });
 window.addEventListener("keydown",e=>{
+  // leave keys alone while typing in a box or using a dropdown/slider
+  const tag=(e.target&&e.target.tagName)||"";
+  if(tag==="INPUT"||tag==="SELECT"||tag==="TEXTAREA")return;
   if(e.key==="Enter"&&S.mode==="draw"&&S.drawPts.length>2)commitDrawn();
   if(e.key==="Escape"){S.drawPts=[];render();}
   // arrow keys step through accepted ROIs (when not mid-draw)
@@ -1222,20 +1435,26 @@ function commitDrawn(){
 /* range / smoothing / reverse */
 $("tMin").addEventListener("change",refreshCalibration);
 $("tMax").addEventListener("change",refreshCalibration);
-$("reverseBtn").addEventListener("click",()=>{
-  if(S.lut){S.lut.reverse();paintScaleGradient();buildTempMap();
-    buildHighlight();toast("Colorbar reversed.");}
-});
 $("smoothR").addEventListener("input",()=>{
   $("smoothV").textContent=$("smoothR").value;
+  settingsChanged();
 });
 function refreshCalibration(){
-  S.tMin=parseFloat($("tMin").value);
-  S.tMax=parseFloat($("tMax").value);
-  if(S.threshold<S.tMin)S.threshold=S.tMin;
-  if(S.threshold>S.tMax)S.threshold=S.tMax;
+  const a=parseFloat($("tMin").value), b=parseFloat($("tMax").value);
+  // min > max is allowed (reversed scale); equal or blank is not
+  if(!isFinite(a)||!isFinite(b)||a===b){
+    $("tMin").value=S.tMin;$("tMax").value=S.tMax;
+    toast("Range needs two different numbers.");return;
+  }
+  S.tMin=a;S.tMax=b;
+  S.threshold=clampToRange(S.threshold);
   paintScaleGradient();
-  if(S.img){buildTempMap();buildHighlight();}
+  // only the value scale changed, so rescale without re-matching colours
+  if(S.img&&S.idxMap){
+    applyRange();buildHighlight();renderROIs();
+    if(S.candidates.length)renderCandidates();
+  }
+  settingsChanged();
 }
 
 /* detection */
@@ -1247,6 +1466,7 @@ $("detectBtn").addEventListener("click",()=>{
 });
 
 function renderCandidates(){
+  updateStepSummaries();
   const area=$("candArea");area.innerHTML="";
   if(!S.candidates.length){
     area.innerHTML='<div class="note">No candidates. '+
@@ -1272,7 +1492,7 @@ function renderCandidates(){
   allDiv.appendChild(keepAll);
   area.appendChild(allDiv);
   S.candidates.forEach((c,i)=>{
-    const m=measureROI(c.pts);
+    const m=getM(c);
     const div=document.createElement("div");
     div.className="roi-item";
     div.innerHTML=
@@ -1318,10 +1538,11 @@ function renderROIs(){
   if(!S.rois.length){
     list.innerHTML='<div class="note">No ROIs yet. Keep a detected '+
       'region or hand-draw one.</div>';
+    updateTotals();syncStylePanel();
     return;
   }
   S.rois.forEach((roi,i)=>{
-    const m=measureROI(roi.pts);
+    const m=getM(roi);
     const div=document.createElement("div");
     div.className="roi-item"+(i===S.selROI?" selected":"");
     const size=m.areaCM2!=null?`${m.areaCM2} cm\u00b2`:`${m.areaPx} px`;
@@ -1351,10 +1572,11 @@ function renderROIs(){
 }
 
 /* ---- Case Summary: totals + peak (delta or absolute) value ---- */
-function updateTotals(){
+function updateTotals(){updateTotalsInner();mirrorTotals();updateStepSummaries();}
+function updateTotalsInner(){
   let areaPx=0,perimPx=0,peak=-Infinity;
   S.rois.forEach(roi=>{
-    const m=measureROI(roi.pts);
+    const m=getM(roi);
     areaPx+=m.areaPx; perimPx+=m.perimPx;
     if(m.maxT!=null && m.maxT>peak) peak=m.maxT;
   });
@@ -1392,7 +1614,7 @@ function updateTotals(){
 /* Case Summary controls */
 $("showNums").addEventListener("change",e=>{
   S.showNums=e.target.checked;
-  render();
+  render();settingsChanged();
 });
 
 /* =====================================================================
@@ -1422,6 +1644,7 @@ function applyModality(key,opts){
   // adopt the modality's default palette as the working scale
   $("palettePreset").value=mod.preset;
   S.paletteStops=PRESETS[mod.preset].slice();
+  S.appliedStops=S.paletteStops.slice();
   S.lut=paletteToLut(S.paletteStops);
   setPalTag(PNAMES[mod.preset]||mod.preset);
   renderStops(); updatePalettePreview();
@@ -1432,10 +1655,13 @@ function applyModality(key,opts){
 }
 $("modality").addEventListener("change",e=>{
   applyModality(e.target.value);
+  settingsChanged();
   toast(curMod().name+" modality selected.");
 });
 $("customName").addEventListener("input",applyUnitLabels);
 $("customUnit").addEventListener("input",applyUnitLabels);
+$("customName").addEventListener("input",settingsChanged);
+$("customUnit").addEventListener("input",settingsChanged);
 
 /* =====================================================================
    PALETTE EDITOR  -- presets + 2..12 editable stops; Swift is the default
@@ -1579,11 +1805,13 @@ function renderStops(){
 $("palettePreset").addEventListener("change",e=>{
   const key=e.target.value;
   S.paletteStops=PRESETS[key].slice();
+  S.appliedStops=S.paletteStops.slice();
   S.lut=paletteToLut(S.paletteStops);
   setPalTag(PNAMES[key]||key);
   renderStops();updatePalettePreview();
   paintScaleGradient();
   if(S.img){buildTempMap();buildHighlight();renderROIs();}
+  settingsChanged();
   toast((PNAMES[key]||key)+" palette applied.");
 });
 $("addStop").addEventListener("click",()=>{
@@ -1603,6 +1831,7 @@ $("applyPalette").addEventListener("click",()=>{
   setPalTag("custom");
   paintScaleGradient();
   if(S.img){buildTempMap();buildHighlight();renderROIs();}
+  S.appliedStops=S.paletteStops.slice();settingsChanged();
   toast("Custom palette applied.");
 });
 
@@ -1611,24 +1840,18 @@ $("applyPalette").addEventListener("click",()=>{
    ===================================================================== */
 function resetAll(){
   S.img=null;S.iw=0;S.ih=0;
-  S.view={x:0,y:0,scale:1};
-  S.lut=null;S.barBox=null;S.tempMap=null;S.validMask=null;
+  S.view={x:0,y:0,scale:1,fit:true,fitScale:1};
+  $("zoomVal").textContent="\u2014";
+  S.barBox=null;S.tempMap=null;S.validMask=null;
   S.calPts=[];S.pxPerMM=0;S.drawPts=[];
   S.candidates=[];S.rois=[];S.selROI=-1;S._hoverCand=-1;
-  S.hiCanvas=null;S.showNums=true;
-  // reset DOM inputs to defaults
+  S.hiCanvas=null;S.idxMap=null;S.mVer++;
+  // clear the image only; settings (scale, palette, smoothing, sticker) stay
   $("fileIn").value="";
   $("fileName").textContent="";
-  $("calMM").value=10;
-  $("smoothR").value=2;$("smoothV").textContent="2";
-  $("minSize").value=120;
-  $("showNums").checked=true;
-  $("customName").value="";$("customUnit").value="";
   $("pxPerMM").textContent="\u2014";
   $("calNote").textContent=
     "No calibration set \u2014 areas will be reported in pixels only.";
-  // reset modality to thermal default (range/threshold/unit/palette = Swift)
-  applyModality("tempC",{skipMap:true});
   // back to View mode, blank stage
   setMode("view");
   stage.style.display="none";
@@ -1637,7 +1860,8 @@ function resetAll(){
   // repaint dependent UI
   paintScaleGradient();updateScaleVisual();
   renderROIs();renderCandidates();
-  toast("Reset \u2014 ready for a new image.");
+  openStep(1);
+  toast("Cleared. Settings kept, ready for a new image.");
 }
 $("newFileBtn").addEventListener("click",resetAll);
 
@@ -1718,7 +1942,7 @@ $("exportImg").addEventListener("click",()=>{
     if(S.showNums){
       const ct=centroid(roi.pts);
       c.fillStyle="#fff";c.strokeStyle="rgba(0,0,0,.8)";
-      c.font="600 22px sans-serif";c.lineWidth=4;
+      c.font="bold 22px Arial";c.lineWidth=4;
       c.strokeText(idx+1,ct[0],ct[1]);c.fillText(idx+1,ct[0],ct[1]);
     }
   });
@@ -1736,7 +1960,7 @@ $("exportCsv").addEventListener("click",()=>{
 
   let areaPx=0,perimPx=0,peak=-Infinity;
   S.rois.forEach((roi,i)=>{
-    const m=measureROI(roi.pts);
+    const m=getM(roi);
     areaPx+=m.areaPx; perimPx+=m.perimPx;
     if(m.maxT!=null && m.maxT>peak) peak=m.maxT;
     lines.push([i+1,
@@ -1869,11 +2093,152 @@ function download(uri,name){
   a.click();a.remove();
 }
 
+/* =====================================================================
+   WORKFLOW STEPS  -- left column accordion, one step open at a time
+   ===================================================================== */
+// make sure a step is expanded (others are left as they are)
+function openStep(n){
+  const el=document.querySelector('.step[data-step="'+n+'"]');
+  if(el)el.classList.add("open");
+}
+// each header collapses/expands its own step
+document.querySelectorAll(".step-head").forEach(h=>{
+  h.addEventListener("click",()=>{
+    const st=h.parentElement, n=+st.dataset.step;
+    st.classList.toggle("open");
+    // collapsing a step leaves its image-click mode
+    if(!st.classList.contains("open")){
+      if(n===3&&S.mode==="cal")setMode("view");
+      if(n===4&&S.mode==="draw")setMode("view");
+    }
+  });
+});
+
+// one-line summary on each step header
+function updateStepSummaries(){
+  const set=(id,t)=>{const el=$(id);if(el)el.textContent=t;};
+  const u=uSuffix(), r=v=>Math.round(v*10)/10;
+  set("sum1",S.img?($("fileName").textContent||"Image loaded"):"No image yet");
+  const modName=S.modality==="custom"
+    ?(($("customName").value||"").trim()||"Custom"):curMod().name;
+  set("sum2",modName+" · "+$("palTag").textContent+" · "+
+    r(S.tMin)+" to "+r(S.tMax));
+  set("sum3",S.pxPerMM>0?S.pxPerMM.toFixed(2)+" px/mm":"Optional");
+  set("sum4","≥ "+r(S.threshold)+u+
+    (S.candidates.length?" · "+S.candidates.length+" found":""));
+  set("sum5",S.rois.length
+    ?S.rois.length+(S.rois.length===1?" lesion":" lesions"):"None yet");
+}
+// copy the case summary numbers into the Export step
+function mirrorTotals(){
+  [["csCount","exCount"],["csDeltaLabel","exDeltaLabel"],
+   ["csDeltaMax","exDeltaMax"],["csTotalArea","exTotalArea"],
+   ["csTotalPerim","exTotalPerim"]]
+    .forEach(([a,b])=>{$(b).textContent=$(a).textContent;});
+}
+
+/* =====================================================================
+   SETTINGS  -- save/load as a file, and remembered in this browser
+   ===================================================================== */
+const SETTINGS_KEY="thermalLesionTracer.settings.v1";
+function getSettings(){
+  return {
+    app:"thermal-lesion-tracer", version:1,
+    modality:S.modality,
+    customName:$("customName").value, customUnit:$("customUnit").value,
+    rangeMin:S.tMin, rangeMax:S.tMax, threshold:S.threshold,
+    smoothing:parseFloat($("smoothR").value),
+    minSizePx:parseInt($("minSize").value,10),
+    stickerMM:parseFloat($("calMM").value),
+    showNumbers:S.showNums,
+    palette:{name:$("palTag").textContent, preset:$("palettePreset").value,
+             stops:(S.appliedStops||S.paletteStops).slice()}
+  };
+}
+function applySettings(o){
+  if(!o||typeof o!=="object"||Array.isArray(o))throw new Error("bad settings");
+  const num=v=>typeof v==="number"&&isFinite(v);
+  // modality first: it sets default range, threshold and palette...
+  if(MODALITIES[o.modality])applyModality(o.modality,{skipMap:true});
+  // ...then anything saved overrides those defaults
+  if(typeof o.customName==="string")$("customName").value=o.customName;
+  if(typeof o.customUnit==="string")$("customUnit").value=o.customUnit;
+  if(num(o.rangeMin)&&num(o.rangeMax)&&o.rangeMin!==o.rangeMax){
+    S.tMin=o.rangeMin;S.tMax=o.rangeMax;
+    $("tMin").value=S.tMin;$("tMax").value=S.tMax;
+  }
+  const p=o.palette;
+  if(p&&Array.isArray(p.stops)&&p.stops.length>=2&&p.stops.length<=MAX_STOPS&&
+     p.stops.every(h=>/^#[0-9a-f]{6}$/i.test(h))){
+    S.paletteStops=p.stops.slice();S.appliedStops=p.stops.slice();
+    S.lut=paletteToLut(S.paletteStops);
+    if(PRESETS[p.preset])$("palettePreset").value=p.preset;
+    setPalTag(typeof p.name==="string"&&p.name?p.name:"custom");
+  }
+  if(num(o.smoothing)){$("smoothR").value=o.smoothing;
+    $("smoothV").textContent=$("smoothR").value;}
+  if(num(o.minSizePx))$("minSize").value=o.minSizePx;
+  if(num(o.stickerMM)&&o.stickerMM>0)$("calMM").value=o.stickerMM;
+  if(typeof o.showNumbers==="boolean"){
+    S.showNums=o.showNumbers;$("showNums").checked=o.showNumbers;}
+  if(num(o.threshold))S.threshold=clampToRange(o.threshold);
+  renderStops();updatePalettePreview();
+  if(S.img){buildTempMap();buildHighlight();}
+  applyUnitLabels();updateScaleVisual();
+  if(S.img)render();
+}
+function saveLocal(){
+  try{localStorage.setItem(SETTINGS_KEY,JSON.stringify(getSettings()));}catch(e){}
+}
+function loadLocal(){
+  try{
+    const raw=localStorage.getItem(SETTINGS_KEY);
+    if(raw)applySettings(JSON.parse(raw));
+  }catch(e){}
+}
+// called whenever a setting changes: refresh summaries, save shortly after
+function settingsChanged(){
+  updateStepSummaries();
+  clearTimeout(S._saveT);S._saveT=setTimeout(saveLocal,400);
+}
+$("saveSettings").addEventListener("click",()=>{
+  const blob=new Blob([JSON.stringify(getSettings(),null,2)],
+                      {type:"application/json"});
+  download(URL.createObjectURL(blob),"tracer_settings.json");
+  toast("Settings saved to file.");
+});
+$("loadSettings").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  const rd=new FileReader();
+  rd.onload=()=>{
+    try{
+      applySettings(JSON.parse(rd.result));settingsChanged();
+      toast("Settings loaded from "+f.name+".");
+    }catch(err){toast("That file isn't a settings file from this app.");}
+    e.target.value="";
+  };
+  rd.readAsText(f);
+});
+$("resetSettings").addEventListener("click",()=>{
+  $("customName").value="";$("customUnit").value="";
+  $("smoothR").value=2;$("smoothV").textContent="2";
+  $("minSize").value=120;$("calMM").value=10;
+  S.showNums=true;$("showNums").checked=true;
+  applyModality("tempC");          // range, threshold, unit, Swift palette
+  if(S.img)render();
+  settingsChanged();
+  toast("Settings reset to defaults.");
+});
+$("minSize").addEventListener("change",settingsChanged);
+$("calMM").addEventListener("change",settingsChanged);
+
 /* initial paint */
 applyModality("tempC",{skipMap:true});   // unit labels + Swift palette by default
 paintScaleGradient();
 updateScaleVisual();
 renderROIs();
+loadLocal();                 // restore last-used settings in this browser
+updateStepSummaries();
 </script>
 </body>
 </html>
