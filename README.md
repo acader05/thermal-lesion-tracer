@@ -20,7 +20,7 @@ Infrared thermography measures heat instead of colour. Inflamed tissue runs warm
 
 ## How we built it
 
-Atif wrote the code. Tahirih was the dermatology expert he went back to throughout development. She explained the clinical side of HS and what a lesion measurement needs to capture, checked the app's outlines and readouts against what she knew clinically, troubleshot the results that didn't look right, and supervised the work as it moved from a rough prototype to the version the lab uses for lesion measurement now. The app works the way it does because of that back and forth.
+We built this together. Atif designed and wrote the code, and Tahirih brought the medical expertise. She explained the clinical side of HS and what a lesion measurement needs to capture, checked the app's outlines and readouts against what she knew clinically, troubleshot the results that didn't look right, and supervised the work as it moved from a rough prototype to the version the lab uses for lesion measurement now. The app works the way it does because of that back and forth.
 
 ---
 
@@ -118,21 +118,21 @@ Vanilla JavaScript, HTML, and CSS. Canvas 2D, `ImageData`, typed arrays, `ArrayB
 
 ## Authors
 
-### Tahirih Nasseri (she/her)
-
-MD candidate at the Temerty Faculty of Medicine, University of Toronto (class of 2027), with a BSc in Psychology and Biology from the University of Victoria. Her research is in AI-assisted and multimodal skin imaging. She has presented imaging work in vitiligo at the AAD Annual Meeting and the Vitiligo International Congress, and in hidradenitis suppurativa at the EHSF 2026 conference. She is first author on a pilot study combining thermography and wound imaging in HS, accepted for presentation at SHSA 2026.
-
-On this project she was the clinical lead: dermatology expertise, troubleshooting, and supervision from the first prototype onward.
-
-[LinkedIn](https://www.linkedin.com/in/tahirih-nasseri-29962a312/)
-
 ### Atif Cader
 
-Researcher in dermatology imaging at the University of Toronto, with a Master of Public Health in occupational health and an honours BSc in physiology and pharmacology. His background is in occupational epidemiology and exposure assessment, including work at the Occupational Cancer Research Centre. In dermatology his focus is infrared thermography, including literature reviews on its use in skin disease and HS, and he is a co-author on the HS pilot above.
+Researcher in dermatology imaging at the University of Toronto, with a Master of Public Health in occupational health and an honours BSc in physiology and pharmacology. His background is in epidemiology and exposure assessment, and he's drawn to the question of how careful measurement can make clinical assessment more consistent. That interest led him to infrared thermography and to research reviewing its use in skin disease.
 
-On this project he designed and wrote the app.
+On this project he designed and built the app, turning the team's clinical questions into a working measurement tool.
 
 [ORCID](https://orcid.org/0009-0007-5644-825X) · [GitHub](https://github.com/acader05)
+
+### Tahirih Nasseri (she/her)
+
+MD candidate at the Temerty Faculty of Medicine, University of Toronto, with a BSc in Psychology and Biology from the University of Victoria. Her research is in imaging across inflammatory skin diseases, including hidradenitis suppurativa and vitiligo. Outside research she is committed to health equity and medical education, including work on 2SLGBTQ+ health curriculum.
+
+On this project she brought the medical expertise, guiding what the tool needed to measure, troubleshooting its results, and supervising its development from the first prototype onward.
+
+[LinkedIn](https://www.linkedin.com/in/tahirih-nasseri-29962a312/)
 
 ## License
 
