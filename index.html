@@ -33,7 +33,7 @@
   /* ---------- app frame: top bar / rail / image / results / footer ---------- */
   .app{display:grid;height:100vh;min-height:640px;
     grid-template-rows:48px minmax(0,1fr) 32px;
-    grid-template-columns:300px minmax(0,1fr) 384px;}
+    grid-template-columns:336px minmax(0,1fr) 424px;}
   .topbar{grid-column:1/-1;grid-row:1;display:flex;align-items:center;gap:14px;
     padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);}
   .rail{grid-column:1;grid-row:2;background:var(--panel);
@@ -99,14 +99,15 @@
   #fileName{color:var(--ink-2);padding-left:14px;border-left:1px solid var(--line);
     white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:42vw;}
   #fileName:empty{display:none;}
-  .menu{position:relative;}
-  .menu summary{list-style:none;}
-  .menu summary::-webkit-details-marker{display:none;}
-  .menu[open] summary{border-color:var(--navy);color:var(--navy);}
-  .menu-pop{position:absolute;right:0;top:calc(100% + 6px);z-index:60;width:270px;
-    display:flex;flex-direction:column;padding:6px;background:var(--panel);
+  /* native popover: fixed under the Settings button at the top-right.
+     The browser handles click-away and Esc close and top-layer stacking. */
+  #settingsPop{position:fixed;inset:auto;top:46px;right:16px;margin:0;width:270px;
+    padding:6px;background:var(--panel);
     border:1px solid var(--line);border-radius:var(--r);
     box-shadow:0 12px 32px rgba(20,30,50,.14);}
+  /* flex only while open; when closed the browser's display:none must win,
+     so the base rule above sets no display */
+  #settingsPop:popover-open{display:flex;flex-direction:column;}
   .menu-pop button,.menu-pop .mi{display:flex;justify-content:flex-start;
     align-items:center;width:100%;height:32px;padding:0 10px;border:0;
     border-radius:var(--r-sm);background:none;font-size:13px;font-weight:500;
@@ -147,6 +148,9 @@
   .readout{font-size:12px;color:var(--ink-2);}
   .readout b{color:var(--ink);font-weight:600;}
   .status{margin-top:10px;font-size:12px;color:var(--ink-2);}
+  .warn{margin-top:10px;padding:8px 10px;border-radius:6px;font-size:12px;
+    color:#7a4a00;background:#fff4e0;border:1px solid #f1d6a6;}
+  .warn[hidden]{display:none;}
   .hr{height:1px;background:var(--line);margin:16px 0 14px;}
   .sub{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:600;}
   .pal-tag{margin-left:auto;padding:1px 8px;border-radius:20px;font-size:11px;
@@ -173,7 +177,8 @@
   .stage-area{position:relative;flex:1;min-height:0;display:flex;}
   #stageWrap{flex:1;min-width:0;display:flex;overflow:auto;
     background:var(--stage);border-radius:var(--r);}
-  #stage{display:block;flex:none;margin:auto;cursor:crosshair;}
+  #stage{display:block;flex:none;margin:auto;cursor:crosshair;touch-action:none;
+    -webkit-user-select:none;user-select:none;-webkit-touch-callout:none;}
   #stage.pan{cursor:grab;}
   #stage.panning{cursor:grabbing;}
   #empty{margin:auto;display:flex;flex-direction:column;align-items:center;gap:8px;
@@ -259,7 +264,7 @@
 
   /* smaller laptop screens: narrower side panels, tighter summary */
   @media (max-width:1360px){
-    .app{grid-template-columns:276px minmax(0,1fr) 356px;}
+    .app{grid-template-columns:308px minmax(0,1fr) 392px;}
   }
   @media (max-height:820px){
     .stat{padding:8px 16px;}
@@ -286,9 +291,10 @@
   .toast.show{opacity:1;}
 
   /* lightweight colour picker popover (swatches + HSV wheel) */
-  .color-pop{position:fixed;z-index:1000;width:178px;padding:12px;
+  .color-pop{position:fixed;z-index:1000;inset:auto;margin:0;width:178px;padding:12px;
     background:var(--panel);border:1px solid var(--line);border-radius:10px;
     box-shadow:0 12px 44px rgba(20,30,60,.24);}
+  .color-pop:popover-open{display:block;}
   .cp-swatches{display:grid;grid-template-columns:repeat(8,1fr);gap:5px;
     margin-bottom:10px;}
   .cp-swatches .swatch{width:100%;height:auto;aspect-ratio:1;}
@@ -321,17 +327,16 @@
     </div>
     <span id="fileName"></span>
     <span class="spacer"></span>
-    <details class="menu" id="settingsMenu">
-      <summary class="btn">Settings</summary>
-      <div class="menu-pop">
-        <button type="button" id="saveSettings">Save settings to file</button>
-        <label class="mi" for="loadSettings">Load settings from file</label>
-        <input type="file" id="loadSettings" accept=".json,application/json" hidden>
-        <button type="button" id="resetSettings">Reset to defaults</button>
-        <p class="menu-note">Scale, palette, range, threshold, smoothing and sticker
-          size are also remembered in this browser between sessions.</p>
-      </div>
-    </details>
+    <button type="button" class="btn" id="settingsBtn"
+            popovertarget="settingsPop">Settings</button>
+    <div class="menu-pop" id="settingsPop" popover>
+      <button type="button" id="saveSettings">Save settings to file</button>
+      <label class="mi" for="loadSettings">Load settings from file</label>
+      <input type="file" id="loadSettings" accept=".json,application/json" hidden>
+      <button type="button" id="resetSettings">Reset to defaults</button>
+      <p class="menu-note">Scale, palette, range, threshold, smoothing and sticker
+        size are also remembered in this browser between sessions.</p>
+    </div>
   </header>
 
   <!-- ================= left: workflow ================= -->
@@ -343,15 +348,19 @@
         <svg class="chev" viewBox="0 0 12 12"><path d="M4 2l4 4-4 4" fill="none"
           stroke="currentColor" stroke-width="1.6"/></svg></button>
       <div class="step-body">
-        <p class="lead">A false-colour screenshot (PNG or JPEG) with its colour bar
-          in view.</p>
+        <p class="lead">A screenshot or exported image (PNG, JPEG or HEIC) with
+          its colour bar in view.</p>
         <div class="btn-row">
-          <label for="fileIn" class="btn primary">Load image</label>
+          <label for="fileIn" class="btn primary">Add image</label>
           <button type="button" id="newFileBtn">Clear image</button>
           <button type="button" class="tip" data-tip="Clear image removes the image
             and all lesions but keeps your scale, palette and other settings.">?</button>
         </div>
         <input type="file" id="fileIn" accept="image/*" hidden>
+        <p id="imgWarn" class="warn" hidden>This looks like a camera photo. A
+          photo of a screen shifts the colours, so temperatures read from it can
+          be off. Use a screenshot or an image exported from the thermal software
+          where you can.</p>
       </div>
     </div>
 
@@ -475,6 +484,8 @@
             Detect at current threshold</button>
           <button type="button" id="modeDraw" data-mode="draw" class="wide">
             Draw by hand</button>
+          <p class="status" style="margin-top:2px;">With an Apple Pencil you can
+            draw an outline on the image at any time.</p>
         </div>
       </div>
     </div>
@@ -490,15 +501,15 @@
       <button type="button" id="zoomOut" class="icon" aria-label="Zoom out">&minus;</button>
       <span id="zoomVal">&mdash;</span>
       <button type="button" id="zoomIn" class="icon" aria-label="Zoom in">+</button>
-      <span class="hint">Ctrl or &#8984; + scroll to zoom, drag to pan</span>
+      <span class="hint">Pinch, or Ctrl/&#8984; + scroll, to zoom. Drag to pan.</span>
     </div>
 
     <div class="stage-area">
       <div id="stageWrap">
         <div id="empty">
           <span class="e-title">No image loaded</span>
-          <span>Load a false-colour screenshot with its colour bar in view.</span>
-          <label for="fileIn" class="btn primary">Load image</label>
+          <span>Add a screenshot or exported image with its colour bar in view.</span>
+          <label for="fileIn" class="btn primary">Add image</label>
         </div>
         <canvas id="stage" style="display:none;"></canvas>
       </div>
@@ -626,7 +637,7 @@
 </dialog>
 
 <!-- lightweight colour picker (swatches + HSV wheel; no OS picker) -->
-<div id="colorPop" class="color-pop" style="display:none;">
+<div id="colorPop" class="color-pop" popover>
   <div class="cp-swatches" id="cpSwatches"></div>
   <div class="cp-custom">
     <canvas id="cpWheel" width="150" height="150"></canvas>
@@ -675,6 +686,7 @@ const S = {
   calPts:[],                // calibration click points (image coords)
   pxPerMM:0,
   drawPts:[],               // in-progress hand-drawn polygon (image coords)
+  freehand:false,           // true while a stroke is being drawn
   candidates:[],            // [{pts:[[x,y]...]}] auto-detected
   rois:[],                  // accepted [{pts, color}]
   selROI:-1,                // index of the currently selected/highlighted ROI
@@ -1256,16 +1268,20 @@ function render(){
     drawCalLine(S.calLine[0],S.calLine[1],
       (parseFloat($("calMM").value)||10)+" mm");
   }
-  // in-progress hand-drawn polygon
+  // in-progress outline: white with a dark edge so it shows on any colour;
+  // clicked points also get a dot each (a freehand stroke doesn't)
   if(S.drawPts.length){
-    sctx.strokeStyle="#e2624b";sctx.fillStyle="#e2624b";sctx.lineWidth=2;
-    sctx.beginPath();
-    S.drawPts.forEach((p,i)=>{
+    sctx.save();sctx.lineCap="round";sctx.lineJoin="round";
+    strokeTwice(()=>S.drawPts.forEach((p,i)=>{
       const x=p[0]*scale,y=p[1]*scale;
       i?sctx.lineTo(x,y):sctx.moveTo(x,y);
+    }));
+    if(!S.freehand)S.drawPts.forEach(p=>{
+      sctx.beginPath();sctx.arc(p[0]*scale,p[1]*scale,3.5,0,Math.PI*2);
+      sctx.fillStyle="#fff";sctx.fill();
+      sctx.lineWidth=1.5;sctx.strokeStyle="rgba(0,0,0,.75)";sctx.stroke();
     });
-    sctx.stroke();
-    S.drawPts.forEach(p=>sctx.fillRect(p[0]*scale-3,p[1]*scale-3,6,6));
+    sctx.restore();
   }
 }
 /* white line with a dark edge so it shows on any colour of the scale */
@@ -1451,13 +1467,12 @@ function autoDetectColorbar(){
   S.barBox=null;S.lut=null;return false;
 }
 
-$("fileIn").addEventListener("change",e=>{
-  const f=e.target.files[0];if(!f)return;
-  e.target.value="";      // so picking the same file again still reloads it
-  $("fileName").textContent=f.name;S.fileName=f.name;
+// one image-load path, shared by the file picker and the native bridge
+function loadImageSource(src,name){
+  $("fileName").textContent=name||"";S.fileName=name||"";
   const img=new Image();
   img.onload=()=>{
-    URL.revokeObjectURL(img.src);
+    if(img.src.startsWith("blob:"))URL.revokeObjectURL(img.src);
     S.img=img;S.iw=img.naturalWidth;S.ih=img.naturalHeight;
     S.candidates=[];S.rois=[];S.calPts=[];S.drawPts=[];S.selROI=-1;
     S.hiCanvas=null;S.pxPerMM=0;S.calPx=0;S.calLine=null;$("pxPerMM").textContent="\u2014";
@@ -1475,10 +1490,50 @@ $("fileIn").addEventListener("change",e=>{
     updateStepSummaries();openStep(2);
     toast("Image loaded \u2014 using the "+$("palTag").textContent+" scale.");
   };
-  img.src=URL.createObjectURL(f);
+  img.onerror=()=>toast("Could not load that image.");
+  img.src=src;
+}
+$("fileIn").addEventListener("change",e=>{
+  const f=e.target.files[0];if(!f)return;
+  e.target.value="";      // so picking the same file again still reloads it
+  checkCameraPhoto(f);
+  loadImageSource(URL.createObjectURL(f),f.name);
 });
 
+/* Native-shell bridge. When the app is wrapped in a WKWebView (the iPad
+   build), native Swift code hands a captured photo to the engine by
+   calling window.NativeBridge.loadImage(dataURL, name). Harmless in a
+   plain browser: nothing calls it there. depthInfo is reserved for a
+   later TrueDepth capture and is just stored for now. */
+window.NativeBridge={
+  loadImage(dataURL,name,depthInfo){
+    S.nativeDepth=depthInfo||null;   // {widthPx,heightPx,...} for later use
+    $("imgWarn").hidden=true;        // a native capture is not a photo-of-a-screen
+    loadImageSource(dataURL,name||"capture.jpg");
+  },
+  version(){return APP_VERSION;}
+};
+// tell native the engine is ready, if a bridge is listening
+try{window.webkit.messageHandlers.tracer.postMessage({type:"ready"});}catch(e){}
+
 window.addEventListener("resize",()=>{if(S.img){fitView();render();}});
+
+/* A photo from a phone camera carries EXIF camera details (maker, lens,
+   exposure). Screenshots and thermal-software exports don't, apart from
+   FLIR's own files, which are fine to use. Only a hint, never a block. */
+function checkCameraPhoto(f){
+  $("imgWarn").hidden=true;
+  f.slice(0,131072).arrayBuffer().then(buf=>{
+    const txt=new TextDecoder("latin1").decode(new Uint8Array(buf));
+    // Apple photos name the lens ("back triple camera", "front camera");
+    // screenshots don't, but can mention Apple in their colour profile
+    const exif=txt.includes("Exif");
+    const camera=/(back|front)[a-z ]*camera/i.test(txt)||
+      /samsung|Google|Pixel|HUAWEI|Xiaomi|Canon|NIKON|SONY/.test(txt);
+    const skip=/FLIR|Screenshot/i.test(txt);
+    $("imgWarn").hidden=!(exif&&camera&&!skip);
+  }).catch(()=>{});
+}
 
 /* mode switching */
 function setMode(m){
@@ -1490,8 +1545,8 @@ function setMode(m){
     view:"",
     cal :"Click one edge of the sticker, then the opposite edge. "+
          "Esc cancels.",
-    draw:"Click to place outline points. Click the first point or press "+
-         "Enter to close the lesion. Esc cancels."
+    draw:"Draw around the lesion in one stroke, or click points and click "+
+         "the first one (or press Enter) to close it. Esc cancels."
   };
   $("modeHelp").textContent=help[m];
   $("modeHelp").hidden=(m==="view");
@@ -1530,7 +1585,7 @@ function applyCalibration(){
 $("calMM").addEventListener("change",applyCalibration);
 
 /* clicks on the image */
-stage.addEventListener("mousemove",e=>{
+stage.addEventListener("pointermove",e=>{
   if(S.mode!=="cal"||S.calPts.length!==1)return;
   const r=stage.getBoundingClientRect();
   S.calHover=[(e.clientX-r.left)/S.view.scale,(e.clientY-r.top)/S.view.scale];
@@ -1542,7 +1597,7 @@ stage.addEventListener("mouseleave",()=>{
 $("showCal").addEventListener("change",e=>{S.showCal=e.target.checked;render();});
 
 stage.addEventListener("click",e=>{
-  if(!S.img)return;
+  if(!S.img||performance.now()<(S._noClickUntil||0))return;
   const rect=stage.getBoundingClientRect();
   const x=(e.clientX-rect.left)/S.view.scale;
   const y=(e.clientY-rect.top)/S.view.scale;
@@ -1599,6 +1654,121 @@ function commitDrawn(){
   toast(`Added as Lesion ${S.rois.length}.`);
   renderROIs();render();
 }
+
+/* =====================================================================
+   PENCIL, TOUCH AND MOUSE ON THE IMAGE
+   - Apple Pencil draws a lesion outline in one stroke (any time except
+     while calibrating, where a Pencil tap places a point)
+   - one finger pans; it draws only while "Draw by hand" is on
+   - two fingers pinch to zoom and move the image
+   - mouse: in Draw mode, press and drag draws a freehand outline;
+     single clicks still place points one at a time
+   ===================================================================== */
+// spread a dense freehand path out to evenly spaced points
+function resamplePath(pts,step){
+  const out=[pts[0]];
+  for(let k=1;k<pts.length;k++){
+    const last=out[out.length-1];
+    if(Math.hypot(pts[k][0]-last[0],pts[k][1]-last[1])>=step)out.push(pts[k]);
+  }
+  return out;
+}
+(function initPointerInput(){
+  const wrap=$("stageWrap");
+  const touches=new Map();       // finger pointerId -> {x,y}
+  let stroke=null, pinch=null, tpan=null, raf=0;
+  const toImg=e=>{
+    const r=stage.getBoundingClientRect();
+    return [(e.clientX-r.left)/S.view.scale,(e.clientY-r.top)/S.view.scale];
+  };
+  const redraw=()=>{if(!raf)raf=requestAnimationFrame(()=>{raf=0;render();});};
+  const cancelStroke=()=>{
+    if(stroke&&S.freehand){S.drawPts=[];S.freehand=false;redraw();}
+    stroke=null;
+  };
+  const mid=()=>{const [a,b]=[...touches.values()];
+    return {x:(a.x+b.x)/2,y:(a.y+b.y)/2,d:Math.hypot(a.x-b.x,a.y-b.y)};};
+
+  stage.addEventListener("pointerdown",e=>{
+    if(!S.img)return;
+    if(e.pointerType==="touch"){
+      touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      if(touches.size===2){                 // second finger: pinch, not draw
+        cancelStroke();tpan=null;
+        const m=mid();pinch={d:m.d||1,scale:S.view.scale,x:m.x,y:m.y};
+      }else if(touches.size===1){
+        if(S.mode==="draw"&&!S.drawPts.length)
+          stroke={id:e.pointerId,pts:[toImg(e)],moved:false,sx:e.clientX,sy:e.clientY};
+        else if(S.mode!=="draw")
+          tpan={x:e.clientX,y:e.clientY,sl:wrap.scrollLeft,st:wrap.scrollTop};
+      }
+      return;
+    }
+    if(e.button!==0)return;
+    const penDraws=e.pointerType==="pen"&&S.mode!=="cal";
+    const mouseDraws=e.pointerType==="mouse"&&S.mode==="draw";
+    if((penDraws||mouseDraws)&&!S.drawPts.length){
+      stroke={id:e.pointerId,pts:[toImg(e)],moved:false,sx:e.clientX,sy:e.clientY};
+      try{stage.setPointerCapture(e.pointerId);}catch(err){}
+      if(e.pointerType==="pen")e.preventDefault();   // no pan/click from pen
+    }
+  });
+
+  stage.addEventListener("pointermove",e=>{
+    if(touches.has(e.pointerId)){
+      touches.set(e.pointerId,{x:e.clientX,y:e.clientY});
+      if(pinch&&touches.size===2){
+        const m=mid(), r=wrap.getBoundingClientRect();
+        wrap.scrollLeft-=m.x-pinch.x;wrap.scrollTop-=m.y-pinch.y;   // two-finger move
+        pinch.x=m.x;pinch.y=m.y;
+        const z=pinch.scale*m.d/pinch.d;
+        if(Math.abs(z-S.view.scale)>0.002)setZoom(z,m.x-r.left,m.y-r.top);
+        return;
+      }
+      if(tpan){
+        wrap.scrollLeft=tpan.sl-(e.clientX-tpan.x);
+        wrap.scrollTop=tpan.st-(e.clientY-tpan.y);
+        return;
+      }
+    }
+    if(!stroke||e.pointerId!==stroke.id)return;
+    if(!stroke.moved){
+      if(Math.hypot(e.clientX-stroke.sx,e.clientY-stroke.sy)<6)return;
+      stroke.moved=true;S.freehand=true;S.drawPts=stroke.pts;
+    }
+    // coalesced events give the Pencil's full sample rate, so curves stay smooth
+    const evs=(e.getCoalescedEvents&&e.getCoalescedEvents().length)
+      ?e.getCoalescedEvents():[e];
+    for(const ev of evs){
+      const p=toImg(ev), last=stroke.pts[stroke.pts.length-1];
+      if(Math.hypot(p[0]-last[0],p[1]-last[1])*S.view.scale>=1.5)stroke.pts.push(p);
+    }
+    redraw();
+  });
+
+  const end=e=>{
+    if(touches.has(e.pointerId)){
+      touches.delete(e.pointerId);
+      if(touches.size<2)pinch=null;
+      if(!touches.size)tpan=null;
+    }
+    if(!stroke||e.pointerId!==stroke.id)return;
+    const st=stroke;stroke=null;
+    if(!st.moved)return;                    // a tap: the click handler takes it
+    S._noClickUntil=performance.now()+400;  // the stroke's own click is not a point
+    S.freehand=false;
+    const pts=st.pts;
+    if(e.type==="pointercancel"||pts.length<6||polygonArea(pts)<9){
+      S.drawPts=[];render();return;          // too small to be a lesion
+    }
+    // spacing ~1/300 of the outline, at least 1.5 image px
+    const step=Math.max(1.5,polygonPerim(pts)/300);
+    S.drawPts=resamplePath(pts,step);
+    commitDrawn();
+  };
+  stage.addEventListener("pointerup",end);
+  stage.addEventListener("pointercancel",end);
+})();
 
 /* range / smoothing / reverse */
 $("tMin").addEventListener("change",refreshCalibration);
@@ -1959,14 +2129,25 @@ function openColorPicker(anchor,hex,onChange){
   cpState={hex,h:0,s:0,v:0,onChange:null};   // suppress onChange during setup
   cpSetFromHex(hex);
   cpState.onChange=onChange;
-  const pop=$("colorPop");pop.style.display="block";
+  const pop=$("colorPop");
+  if(!pop.matches(":popover-open"))pop.showPopover();   // top layer, click-away closes
+  // position under the anchor swatch (kept in JS; CSS anchor positioning
+  // is not in Safari yet, and this app runs on iPad too)
   const ar=anchor.getBoundingClientRect(),pw=pop.offsetWidth,ph=pop.offsetHeight;
   let left=ar.left,top=ar.bottom+6;
   if(left+pw>window.innerWidth-8)left=window.innerWidth-8-pw;
   if(top+ph>window.innerHeight-8)top=ar.top-6-ph;
   pop.style.left=Math.max(8,left)+"px";pop.style.top=Math.max(8,top)+"px";
 }
-function closeColorPicker(){$("colorPop").style.display="none";cpState.onChange=null;}
+function closeColorPicker(){
+  const pop=$("colorPop");
+  if(pop.matches(":popover-open"))pop.hidePopover();
+  cpState.onChange=null;
+}
+// clicking away or pressing Esc closes the popover; clear the callback too
+$("colorPop").addEventListener("toggle",e=>{
+  if(e.newState==="closed")cpState.onChange=null;
+});
 $("cpWheel").addEventListener("click",e=>{
   const cv=$("cpWheel"),r=cv.getBoundingClientRect(),R=cv.width/2;
   const x=(e.clientX-r.left)*(cv.width/r.width)-R,
@@ -1979,13 +2160,6 @@ $("cpLight").addEventListener("input",e=>{
   cpState.v=parseInt(e.target.value,10)/100;cpDrawWheel();cpUpdate();
 });
 $("cpDone").addEventListener("click",closeColorPicker);
-document.addEventListener("mousedown",e=>{
-  const pop=$("colorPop");
-  if(pop.style.display==="none")return;
-  if(pop.contains(e.target))return;
-  if(e.target.classList&&e.target.classList.contains("swatch"))return;
-  closeColorPicker();
-});
 
 function renderStops(){
   const wrap=$("paletteStops");wrap.innerHTML="";
@@ -2047,7 +2221,7 @@ function resetAll(){
   S.hiCanvas=null;S.idxMap=null;S.mVer++;
   // clear the image only; settings (scale, palette, smoothing, sticker) stay
   $("fileIn").value="";
-  $("fileName").textContent="";S.fileName="";
+  $("fileName").textContent="";S.fileName="";$("imgWarn").hidden=true;
   $("pxPerMM").textContent="\u2014";
   $("calNote").textContent=
     "No calibration set \u2014 areas will be reported in pixels only.";
@@ -2452,12 +2626,11 @@ $("calMM").addEventListener("change",settingsChanged);
 })();
 // settings menu closes after a choice or a click elsewhere
 (function initMenu(){
-  const menu=$("settingsMenu");
-  menu.querySelectorAll(".menu-pop button,.menu-pop .mi").forEach(el=>
-    el.addEventListener("click",()=>{menu.open=false;}));
-  document.addEventListener("click",e=>{
-    if(menu.open&&!menu.contains(e.target))menu.open=false;
-  });
+  // the Settings button opens the popover (popovertarget); click-away and
+  // Esc close it natively. We only need to close it after a choice.
+  const pop=$("settingsPop");
+  pop.querySelectorAll("button,.mi").forEach(el=>
+    el.addEventListener("click",()=>{try{pop.hidePopover();}catch(e){}}));
 })();
 // footer version + citation dialog
 (function initCite(){
