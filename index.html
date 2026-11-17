@@ -33,7 +33,9 @@
   /* ---------- app frame: top bar / rail / image / results / footer ---------- */
   .app{display:grid;height:100vh;min-height:640px;
     grid-template-rows:48px minmax(0,1fr) 32px;
-    grid-template-columns:336px minmax(0,1fr) 424px;}
+    /* rail / image / results split 1:3:1, with floors so the side panels
+       stay usable on a laptop (the image gives up the space first) */
+    grid-template-columns:minmax(320px,1fr) minmax(0,3fr) minmax(430px,1fr);}
   .topbar{grid-column:1/-1;grid-row:1;display:flex;align-items:center;gap:14px;
     padding:0 16px;background:var(--panel);border-bottom:1px solid var(--line);}
   .rail{grid-column:1;grid-row:2;background:var(--panel);
@@ -191,18 +193,28 @@
   .mode-help[hidden]{display:none;}
 
   /* threshold scale docked under the image */
-  .thr-dock{display:grid;grid-template-columns:150px minmax(0,1fr);gap:18px;
+  .thr-dock{display:grid;grid-template-columns:180px minmax(0,1fr);gap:18px;
     align-items:center;padding:10px 18px 6px 16px;background:var(--panel);
     border:1px solid var(--line);border-radius:var(--r);}
   .thr-read .lbl{display:block;font-size:12px;color:var(--ink-2);}
-  .thr-read .big{font-size:22px;font-weight:650;letter-spacing:-.01em;color:var(--navy);}
+  /* one line, always: a wider number (e.g. -1.5 vs 1) must not wrap and
+     push the Hot/Cold switch down, which resizes the image area */
+  .thr-read .big{display:block;font-size:22px;font-weight:650;letter-spacing:-.01em;
+    color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
   #scaleBar{position:relative;height:26px;cursor:ew-resize;user-select:none;
     touch-action:none;}
   #scaleGrad{position:absolute;inset:0;border-radius:5px;
     box-shadow:inset 0 0 0 1px rgba(0,0,0,.08);}
   #scaleMask{position:absolute;top:0;bottom:0;left:0;border-radius:5px 0 0 5px;
-    background:rgba(255,255,255,.72);border-right:2px solid var(--navy);
-    backdrop-filter:grayscale(1);}
+    background:rgba(255,255,255,.45);border-right:2px solid var(--navy);
+    backdrop-filter:saturate(.5);}   /* faded, colours still visible */
+  /* Hot/Cold switch under the threshold readout */
+  .dir-seg{margin-top:6px;}
+  .dir-seg button{height:24px;padding:0 14px;font-size:12px;}
+  /* hot runs show Max, cold runs show Min */
+  .les .mincol{display:none;}
+  .les.cold .mincol{display:table-cell;}
+  .les.cold .maxcol{display:none;}
   #scaleHandle{position:absolute;top:-5px;bottom:-5px;width:12px;margin-left:-6px;
     border-radius:4px;background:var(--navy);border:2px solid #fff;
     box-shadow:0 1px 5px rgba(0,0,0,.3);cursor:ew-resize;}
@@ -214,7 +226,8 @@
   .stats{display:grid;grid-template-columns:1fr 1fr;gap:1px;background:var(--line);
     border-bottom:1px solid var(--line);}
   .stat{background:var(--panel);padding:12px 16px;}
-  .stat .k{display:block;font-size:12px;color:var(--ink-2);}
+  .stat.span2{grid-column:1/-1;}
+  .stat .k{display:flex;align-items:center;gap:5px;font-size:12px;color:var(--ink-2);}
   .stat .v{display:block;margin-top:2px;font-size:20px;font-weight:600;
     letter-spacing:-.01em;white-space:nowrap;color:var(--navy);}
   .les-sec{flex:1;min-height:0;display:flex;flex-direction:column;padding:14px 16px 12px;}
@@ -264,7 +277,7 @@
 
   /* smaller laptop screens: narrower side panels, tighter summary */
   @media (max-width:1360px){
-    .app{grid-template-columns:308px minmax(0,1fr) 392px;}
+    .app{grid-template-columns:minmax(300px,1fr) minmax(0,3fr) minmax(400px,1fr);}
   }
   @media (max-height:820px){
     .stat{padding:8px 16px;}
@@ -464,7 +477,8 @@
           stroke="currentColor" stroke-width="1.6"/></svg></button>
       <div class="step-body">
         <p class="lead">Drag the threshold on the scale under the image, then
-          detect. Everything at or above it is highlighted live.</p>
+          detect. Choose Hot or Cold under the image: Hot highlights everything
+          at or above the threshold, Cold everything at or below it.</p>
         <div class="field">
           <span class="lab">Smoothing <button type="button" class="tip" data-tip="Joins
             speckled pixels into one region and rounds the outlines. Higher values
@@ -485,7 +499,8 @@
           <button type="button" id="modeDraw" data-mode="draw" class="wide">
             Draw by hand</button>
           <p class="status" style="margin-top:2px;">With an Apple Pencil you can
-            draw an outline on the image at any time.</p>
+            draw an outline on the image at any time. Press C (or tick Cold spots
+            under the image) to show cold spots as stripes.</p>
         </div>
       </div>
     </div>
@@ -518,8 +533,12 @@
 
     <div class="thr-dock">
       <div class="thr-read">
-        <span class="lbl">Outline at or above</span>
+        <span class="lbl" id="thrLbl">Outline at or above</span>
         <span class="big"><span id="thrVal">1.5</span> <span id="thrUnit">&deg;C</span></span>
+        <div class="seg dir-seg">
+          <button type="button" id="dirHot" class="active">Hot</button>
+          <button type="button" id="dirCold">Cold</button>
+        </div>
       </div>
       <div>
         <div id="scaleBar">
@@ -543,6 +562,13 @@
         <span class="v" id="csTotalArea">&mdash;</span></div>
       <div class="stat"><span class="k">Total perimeter</span>
         <span class="v" id="csTotalPerim">&mdash;</span></div>
+      <div class="stat span2"><span class="k"><span id="csBurdenLabel">Thermal
+        burden</span> <button type="button" class="tip" data-tip="For every pixel
+        inside a lesion that is past the threshold (above it for Hot, below it
+        for Cold), how far past it is, times the pixel's area, added up. Pixels
+        on the other side count as zero. It uses the threshold currently set, so moving
+        the threshold changes it; the CSV records the threshold used.">?</button></span>
+        <span class="v" id="csBurden">&mdash;</span></div>
     </section>
 
     <section class="les-sec">
@@ -557,9 +583,10 @@
       <div class="tbl-wrap">
         <table class="les">
           <thead><tr>
-            <th>#</th><th id="thMax">Max</th><th id="thMean">Mean</th>
+            <th>#</th><th id="thMax" class="maxcol">Max</th><th id="thMin" class="mincol">Min</th>
+            <th id="thMean">Mean</th>
             <th id="thArea">Area</th>
-            <th id="thPerim">Perim.</th><th></th>
+            <th id="thPerim">Perim.</th><th id="thBurden">Burden</th><th></th>
           </tr></thead>
           <tbody id="roiList"></tbody>
           <tbody id="candArea"></tbody>
@@ -601,8 +628,10 @@
       <div class="sec-head">
         <h2>Export</h2>
         <button type="button" class="tip" data-tip="The CSV has one row per kept
-          lesion plus a summary row, with the image name and tool version on every
-          row. RoiSet.zip opens in ImageJ via ROI Manager, More, Open (a single
+          lesion plus a summary row, with the threshold, thermal burden, image name
+          and tool version on every row. Area leaves out the dashed holes (islands
+          inside a lesion that don't meet the threshold); active area counts only
+          pixels past the threshold. Holes also export as their own ImageJ ROIs. RoiSet.zip opens in ImageJ via ROI Manager, More, Open (a single
           lesion exports as one .roi file).">?</button>
       </div>
       <div class="exp-grid">
@@ -657,7 +686,7 @@
 "use strict";
 // bump this when measurement behaviour changes; it is written into every
 // CSV row and settings file so results can be traced to the version used
-const APP_VERSION="2.0";
+const APP_VERSION="2.2";   // 2.1: burden, Hot/Cold. 2.2: holes left out of area + stats
 /* =====================================================================
    Thermal Lesion Tracer
    Pipeline: colorbar decode -> temperature map -> live threshold ->
@@ -682,6 +711,8 @@ const S = {
   validMask:null,           // Uint8 iw*ih (1 = on the colormap)
   barBox:null,              // {x0,y0,x1,y1} detected colorbar
   threshold:1.5,
+  dir:"hot",                // "hot" = at or above threshold, "cold" = at or below
+  thrByDir:{hot:1.5,cold:-1.5},  // each direction remembers its own threshold
   mode:"view",
   calPts:[],                // calibration click points (image coords)
   pxPerMM:0,
@@ -726,6 +757,11 @@ const MODALITIES = {
              min:0,  max:100,thr:50,  preset:"jet"},
 };
 function curMod(){return MODALITIES[S.modality]||MODALITIES.tempC;}
+// is value t on the highlighted side of the threshold for the current direction?
+// Values are never flipped; only the comparison changes.
+function past(t,thr){
+  return S.dir==="cold" ? t<=thr : t>=thr;
+}
 // current unit string, honouring the Custom unit input
 function curUnit(){
   if(S.modality==="custom"){
@@ -917,7 +953,7 @@ function buildHighlight(){
   const ctx=S.hiCanvas.getContext("2d");
   const img=S.hiCanvas._img, d=img.data;
   for(let p=0,i=3;p<iw*ih;p++,i+=4)
-    d[i]=(validMask[p] && tempMap[p]>=threshold)?110:0;   // soft white wash
+    d[i]=(validMask[p] && past(tempMap[p],threshold))?110:0;   // soft white wash
   ctx.putImageData(img,0,0);
   render();
 }
@@ -967,10 +1003,10 @@ function detectRegions(){
   const sigma=parseFloat($("smoothR").value);
   const minSize=parseInt($("minSize").value)||0;
 
-  // 1 where (>=threshold & valid), then close small gaps between pixels
+  // 1 where (past the threshold & valid), then close small gaps between pixels
   const m=new Uint8Array(iw*ih);
   for(let p=0;p<iw*ih;p++)
-    m[p]=(validMask[p]&&tempMap[p]>=threshold)?1:0;
+    m[p]=(validMask[p]&&past(tempMap[p],threshold))?1:0;
   const bin=closeMask(m,iw,ih,Math.round(sigma));
 
   // connected components (4-conn flood fill)
@@ -1100,43 +1136,147 @@ function polygonPerim(pts){
   }
   return p;
 }
-function measureROI(pts){
-  const {tempMap,validMask,iw,ih,pxPerMM}=S;
-  // bounding box raster scan for temperature stats inside the polygon
-  let minx=iw,miny=ih,maxx=0,maxy=0;
-  for(const [x,y] of pts){
-    if(x<minx)minx=x;if(x>maxx)maxx=x;
-    if(y<miny)miny=y;if(y>maxy)maxy=y;
+/* pixels whose centre lies inside polygon pts (even-odd rule), as a 0/1
+   mask over a frame {x0,y0,w,h}. With no frame, the polygon's own box
+   (grown by pad pixels, clipped to the image) is used. Scanline fill, so
+   it stays fast on big lesions. */
+function rasterPoly(pts,frame,pad){
+  const {iw,ih}=S;
+  if(!frame){
+    pad=pad||0;
+    let minx=Infinity,miny=Infinity,maxx=-Infinity,maxy=-Infinity;
+    for(const [x,y] of pts){
+      if(x<minx)minx=x;if(x>maxx)maxx=x;
+      if(y<miny)miny=y;if(y>maxy)maxy=y;
+    }
+    const x0=Math.max(0,Math.floor(minx)-pad), y0=Math.max(0,Math.floor(miny)-pad);
+    const x1=Math.min(iw-1,Math.ceil(maxx)+pad), y1=Math.min(ih-1,Math.ceil(maxy)+pad);
+    frame={x0,y0,w:Math.max(0,x1-x0+1),h:Math.max(0,y1-y0+1)};
   }
-  minx=Math.max(0,Math.floor(minx));miny=Math.max(0,Math.floor(miny));
-  maxx=Math.min(iw-1,Math.floor(maxx));maxy=Math.min(ih-1,Math.floor(maxy));
-  let mx=-1e9,mn=1e9,sum=0,cnt=0;
-  for(let y=miny;y<=maxy;y++){
-    for(let x=minx;x<=maxx;x++){
-      // test the pixel's centre; skip pixels that aren't on the colour
-      // scale (labels, skin-texture lines) so they can't skew the stats
-      if(validMask[y*iw+x]&&pointInPoly(x+0.5,y+0.5,pts)){
-        const t=tempMap[y*iw+x];
-        if(t>mx)mx=t;if(t<mn)mn=t;sum+=t;cnt++;
-      }
+  const {x0,y0,w,h}=frame, mask=new Uint8Array(w*h), n=pts.length, xs=[];
+  for(let r=0;r<h;r++){
+    const y=y0+r+0.5; xs.length=0;
+    for(let i=0,j=n-1;i<n;j=i++){
+      const yi=pts[i][1],yj=pts[j][1];
+      if((yi>y)!==(yj>y))
+        xs.push(pts[i][0]+(pts[j][0]-pts[i][0])*(y-yi)/(yj-yi));
+    }
+    xs.sort((a,b)=>a-b);
+    for(let k=0;k+1<xs.length;k+=2){
+      // pixel x is inside when xa < x+0.5 < xb
+      const a=Math.max(0,Math.floor(xs[k]-0.5)+1-x0);
+      const b=Math.min(w-1,Math.ceil(xs[k+1]-0.5)-1-x0);
+      for(let c=a;c<=b;c++)mask[r*w+c]=1;
     }
   }
-  const areaPx=polygonArea(pts), perimPx=polygonPerim(pts);
+  return {x0,y0,w,h,mask};
+}
+
+/* HOLES: islands inside a lesion outline that are NOT past the threshold
+   (cooler patches in a Hot lesion, warmer ones in a Cold lesion). They are
+   found the same way detection works (threshold, then the Smoothing gap
+   closing), must be fully enclosed (a notch open to the outline's edge is
+   not a hole), and must be at least Min size pixels. Returned as outline
+   polygons, drawn dashed and left out of area and the temperature stats. */
+function computeHoles(pts){
+  if(!S.tempMap)return [];
+  const sigma=parseFloat($("smoothR").value)||0, r=Math.round(sigma);
+  const minSize=parseInt($("minSize").value)||0;
+  const R=rasterPoly(pts,null,r+2);
+  const {x0,y0,w,h,mask:inside}=R;
+  if(!w||!h)return [];
+  const {iw,tempMap,validMask,threshold}=S;
+  // pixels past the threshold inside the outline, gaps closed like detection
+  const act=new Uint8Array(w*h);
+  for(let yy=0;yy<h;yy++)for(let xx=0;xx<w;xx++){
+    const k=yy*w+xx;
+    if(!inside[k])continue;
+    const p=(y0+yy)*iw+x0+xx;
+    act[k]=(validMask[p]&&past(tempMap[p],threshold))?1:0;
+  }
+  const cl=closeMask(act,w,h,r);
+  // flood-fill each patch that is inside the outline but not active
+  const lab=new Int32Array(w*h), holes=[], stack=[];
+  let id=0;
+  for(let k=0;k<w*h;k++){
+    if(!inside[k]||cl[k]||lab[k])continue;
+    id++;lab[k]=id;stack.length=0;stack.push(k);
+    let size=0,edge=false;
+    const visit=(m,ok)=>{
+      if(!ok||!inside[m]){edge=true;return;}  // reaches the outline: a notch
+      if(!cl[m]&&!lab[m]){lab[m]=id;stack.push(m);}
+    };
+    while(stack.length){
+      const q=stack.pop();size++;
+      const x=q%w,y=(q/w)|0;
+      visit(q-1,x>0);visit(q+1,x<w-1);visit(q-w,y>0);visit(q+w,y<h-1);
+    }
+    if(edge||size<minSize)continue;
+    // k is this patch's top-left pixel, which is where tracing must start
+    const c=traceContour(lab,w,h,id,k);
+    if(c.length<4)continue;
+    const poly=c.map(([x,y])=>[x+x0+0.5,y+y0+0.5]);
+    holes.push(offsetPolygon(smoothSpline(poly,sigma),0.5));
+  }
+  return holes;
+}
+
+function measureROI(pts,holes){
+  const {tempMap,validMask,iw,pxPerMM}=S;
+  holes=holes||[];
+  // pixels inside the outline, minus those inside a hole
+  const R=rasterPoly(pts);
+  const inside=R.mask;
+  holes.forEach(hp=>{
+    const H=rasterPoly(hp,R).mask;
+    for(let k=0;k<H.length;k++)if(H[k])inside[k]=0;
+  });
+  const thr=S.threshold;
+  let mx=-1e9,mn=1e9,sum=0,cnt=0,burden=0,activeN=0;
+  for(let yy=0;yy<R.h;yy++){
+    for(let xx=0;xx<R.w;xx++){
+      if(!inside[yy*R.w+xx])continue;
+      const p=(R.y0+yy)*iw+R.x0+xx;
+      // skip pixels that aren't on the colour scale (labels, skin-texture
+      // lines) so they can't skew the stats
+      if(!validMask[p])continue;
+      const t=tempMap[p];
+      if(t>mx)mx=t;if(t<mn)mn=t;sum+=t;cnt++;
+      // thermal burden: how far past the threshold (above it for hot,
+      // below it for cold); pixels on the other side add 0
+      if(past(t,thr)){burden+=Math.abs(t-thr);activeN++;}
+    }
+  }
+  // area = outline minus holes, matching what is drawn; perimeter = outline
+  let holeArea=0;holes.forEach(hp=>holeArea+=polygonArea(hp));
+  const areaPx=Math.max(0,polygonArea(pts)-holeArea), perimPx=polygonPerim(pts);
   const out={areaPx:Math.round(areaPx),perimPx:+perimPx.toFixed(1),
     maxT:cnt?+mx.toFixed(2):null,minT:cnt?+mn.toFixed(2):null,
-    meanT:cnt?+(sum/cnt).toFixed(2):null};
+    meanT:cnt?+(sum/cnt).toFixed(2):null,
+    thr:+thr.toFixed(2), dir:S.dir,
+    burdenPx:+burden.toFixed(1),           // value units x pixels
+    activePx:activeN,                      // pixels past the threshold
+    holes:holes.length};
   if(pxPerMM>0){
+    const px2cm2=1/(pxPerMM*pxPerMM)/100;  // one pixel in cm^2
     out.areaMM2=+(areaPx/(pxPerMM*pxPerMM)).toFixed(2);
     out.perimMM=+(perimPx/pxPerMM).toFixed(2);
-    out.areaCM2=+(areaPx/(pxPerMM*pxPerMM)/100).toFixed(3);
+    out.areaCM2=+(areaPx*px2cm2).toFixed(3);
     out.perimCM=+(perimPx/pxPerMM/10).toFixed(2);
+    out.burdenCM2=+(burden*px2cm2).toFixed(3);
+    out.activeCM2=+(activeN*px2cm2).toFixed(3);
   }
   return out;
 }
-/* measurements are stored on each ROI/candidate and only redone when
-   the value map or calibration changes (S.mVer bumps) */
+/* measurements (and holes) are stored on each ROI/candidate and only redone
+   when the value map, threshold, direction, calibration, smoothing or min
+   size changes (S.mVer bumps) */
 function getM(o){
-  if(!o._m||o._mVer!==S.mVer){o._m=measureROI(o.pts);o._mVer=S.mVer;}
+  if(!o._m||o._mVer!==S.mVer){
+    o._holes=computeHoles(o.pts);
+    o._m=measureROI(o.pts,o._holes);
+    o._mVer=S.mVer;
+  }
   return o._m;
 }
 function pointInPoly(x,y,pts){
@@ -1233,7 +1373,7 @@ function render(){
     const sel=(idx===S.selROI);
     const lw=roi.strokeW||2.4;
     drawPoly(roi.pts,roi.color,sel?lw+1.6:lw,
-             roi.fill>0?roi.fill:0);
+             roi.fill>0?roi.fill:0,roi._holes);
     if(sel){
       // white guide ring + vertex dots for the selected lesion
       drawPoly(roi.pts,"#ffffff",1.4,0);
@@ -1255,7 +1395,7 @@ function render(){
   S.candidates.forEach((c,i)=>{
     const hot=(i===S._hoverCand);
     sctx.setLineDash(hot?[]:[5,4]);
-    drawPoly(c.pts,"#f0a23c",hot?3.4:1.8,hot?0.18:0);
+    drawPoly(c.pts,"#f0a23c",hot?3.4:1.8,hot?0.18:0,c._holes);
   });
   sctx.setLineDash([]);
   // calibration: while picking, a live line from the first point to the
@@ -1326,21 +1466,31 @@ function drawCalLine(p,q,label){
   }
   sctx.restore();
 }
-function drawPoly(pts,color,lw,fillOpacity){
-  // fillOpacity: 0 = no fill; >0 = filled at that alpha (0..1)
-  const s=S.view.scale;
-  sctx.strokeStyle=color;sctx.lineWidth=lw;
-  sctx.beginPath();
-  pts.forEach((p,i)=>{const x=p[0]*s,y=p[1]*s;
-    i?sctx.lineTo(x,y):sctx.moveTo(x,y);});
-  sctx.closePath();
+function drawPoly(pts,color,lw,fillOpacity,holes){
+  drawShape(sctx,S.view.scale,pts,holes,color,lw,fillOpacity);
+}
+/* one lesion on any canvas: outline solid (in whatever dash is set), any
+   holes as thinner dashed outlines, and the fill (if any) skips the holes.
+   fillOpacity: 0 = no fill; >0 = filled at that alpha (0..1) */
+function drawShape(ctx,s,pts,holes,color,lw,fillOpacity){
+  holes=holes||[];
+  const path=q=>{q.forEach((p,i)=>{const x=p[0]*s,y=p[1]*s;
+    i?ctx.lineTo(x,y):ctx.moveTo(x,y);});ctx.closePath();};
   if(fillOpacity>0){
     const a=Math.round(Math.min(1,fillOpacity)*255)
             .toString(16).padStart(2,"0");
-    sctx.fillStyle=color+a;
-    sctx.fill();
+    ctx.beginPath();path(pts);holes.forEach(path);
+    ctx.fillStyle=color+a;
+    ctx.fill("evenodd");                  // holes stay unfilled
   }
-  sctx.stroke();
+  ctx.strokeStyle=color;ctx.lineWidth=lw;
+  ctx.beginPath();path(pts);ctx.stroke();
+  if(holes.length){
+    const dash=ctx.getLineDash();
+    ctx.setLineDash([4,3]);ctx.lineWidth=Math.max(1,lw*0.75);
+    holes.forEach(h=>{ctx.beginPath();path(h);ctx.stroke();});
+    ctx.setLineDash(dash);
+  }
 }
 function centroid(pts){
   let x=0,y=0;pts.forEach(p=>{x+=p[0];y+=p[1];});
@@ -1350,15 +1500,16 @@ function centroid(pts){
 /* =====================================================================
    7. THE LIVE DRAGGABLE SCALE
    ===================================================================== */
-/* colour for the max readout: the colour at the max end of the active
-   scale (the cold end if the range is typed backwards), stepped inward
-   until it has at least 3:1 contrast on white so it stays readable */
+/* colour for the peak readout: the colour at the end of the scale the
+   current direction looks toward (high values for Hot, low for Cold),
+   stepped inward until it has at least 3:1 contrast on white */
 function peakColour(){
   const lut=S.lut;if(!lut)return "";
   const lum=c=>{const f=v=>{v/=255;return v<=0.03928?v/12.92
     :Math.pow((v+0.055)/1.055,2.4);};
     return 0.2126*f(c.r)+0.7152*f(c.g)+0.0722*f(c.b);};
-  const n=lut.length, end=S.tMax>=S.tMin?n-1:0, dir=end?-1:1;
+  const highEnd=(S.tMax>=S.tMin)===(S.dir!=="cold");
+  const n=lut.length, end=highEnd?n-1:0, dir=end?-1:1;
   for(let k=end;k>=0&&k<n;k+=dir){
     const c=lut[k];
     if(1.05/(lum(c)+0.05)>=3)return `rgb(${c.r|0},${c.g|0},${c.b|0})`;
@@ -1393,23 +1544,26 @@ function paintScaleGradient(){
   }
   updateScaleVisual();
 }
+// position of a value along the scale bar, 0 (left) to 1 (right)
+function scalePos(t){
+  return Math.min(1,Math.max(0,(t-S.tMin)/(S.tMax-S.tMin)));
+}
 function updateScaleVisual(){
-  const f=(S.threshold-S.tMin)/(S.tMax-S.tMin);
-  const cl=Math.min(1,Math.max(0,f));
-  // shade the side holding values below the threshold
-  // (the left normally, the right when the range is typed backwards)
+  const fh=scalePos(S.threshold);
+  // grey out the values that are not highlighted: for Hot, from the low end
+  // of the scale up to the threshold; for Cold, from the threshold to the
+  // high end. (The ends swap sides when the range is typed backwards.)
+  const lowEnd=S.tMax>=S.tMin?0:1;
+  const fl=S.dir==="cold"?1-lowEnd:lowEnd;
+  const a=Math.min(fl,fh), b=Math.max(fl,fh);
   const mask=$("scaleMask");
-  if(S.tMax>=S.tMin){
-    mask.style.left="0";mask.style.width=(cl*100)+"%";
-    mask.style.borderRadius="6px 0 0 6px";
-    mask.style.borderRight="2px solid var(--navy)";mask.style.borderLeft="0";
-  }else{
-    mask.style.left=(cl*100)+"%";mask.style.width=((1-cl)*100)+"%";
-    mask.style.borderRadius="0 6px 6px 0";
-    mask.style.borderLeft="2px solid var(--navy)";mask.style.borderRight="0";
-  }
-  $("scaleHandle").style.left=(cl*100)+"%";
-  $("thrVal").textContent=(Math.round(S.threshold*10)/10);
+  mask.style.left=(a*100)+"%";mask.style.width=((b-a)*100)+"%";
+  const L=a<=0?"5px":"0", R=b>=1?"5px":"0";
+  mask.style.borderRadius=`${L} ${R} ${R} ${L}`;
+  mask.style.borderLeft="0";mask.style.borderRight="0";
+  $("scaleHandle").style.left=(fh*100)+"%";
+  // always one decimal (1.0, -1.5) so the readout keeps a steady width
+  $("thrVal").textContent=S.threshold.toFixed(1);
 }
 // the range can be typed backwards, so clamp between the smaller and larger end
 function clampToRange(t){
@@ -1418,10 +1572,49 @@ function clampToRange(t){
 }
 function setThreshold(t,live){
   S.threshold=clampToRange(t);
+  S.thrByDir[S.dir]=S.threshold;             // remembered per direction
+  S.mVer++;                                  // burden depends on the threshold
   updateScaleVisual();
   settingsChanged();
   if(live && S.tempMap) scheduleHighlight();   // live update while dragging
 }
+
+/* ---- Hot / Cold direction ----
+   Hot outlines at or above the threshold, Cold at or below it. Values are
+   read the same either way, so a cold spot reads as, e.g., -2.06 °C. */
+// refresh everything that shows the direction (no checks, no toasts)
+function applyDirUI(){
+  const cold=S.dir==="cold";
+  $("dirHot").classList.toggle("active",!cold);
+  $("dirCold").classList.toggle("active",cold);
+  $("thrLbl").textContent=cold?"Outline at or below":"Outline at or above";
+  document.querySelector("table.les").classList.toggle("cold",cold);
+  S.mVer++;                                  // burden depends on the direction
+  paintScaleGradient();                      // also redraws the mask + handle
+  if(S.tempMap)buildHighlight();
+  renderROIs();
+  if(S.candidates.length)renderCandidates();
+  updateStepSummaries();
+}
+function setDir(d){
+  if(d===S.dir)return;
+  // a lesion is measured by the direction it was found in, so don't mix
+  // hot and cold lesions in one table or one CSV
+  if(S.rois.length){
+    toast("Export, then Clear all, before switching to "+d+" spots.");
+    return;
+  }
+  S.candidates=[];S._hoverCand=-1;          // found in the other direction
+  S.thrByDir[S.dir]=S.threshold;
+  S.dir=d;
+  S.threshold=clampToRange(S.thrByDir[d]);
+  applyDirUI();
+  settingsChanged();
+  toast(d==="cold"?"Cold: outlining at or below the threshold."
+                  :"Hot: outlining at or above the threshold.");
+}
+$("dirHot").addEventListener("click",()=>setDir("hot"));
+$("dirCold").addEventListener("click",()=>setDir("cold"));
 // redraw the highlight at most once per screen frame
 function scheduleHighlight(){
   if(S._hiPending)return;
@@ -1441,7 +1634,13 @@ function scheduleHighlight(){
   const start=(e)=>{dragging=true;setThreshold(tFromEvent(e),true);
     e.preventDefault();};
   const move=(e)=>{if(dragging)setThreshold(tFromEvent(e),true);};
-  const end=()=>{dragging=false;};
+  // when a drag finishes, refresh the table so burden matches the new threshold
+  const end=()=>{
+    if(!dragging)return;
+    dragging=false;
+    if(S.rois.length)renderROIs();
+    if(S.candidates.length)renderCandidates();
+  };
   bar.addEventListener("mousedown",start);
   window.addEventListener("mousemove",move);
   window.addEventListener("mouseup",end);
@@ -1786,6 +1985,7 @@ function refreshCalibration(){
   }
   S.tMin=a;S.tMax=b;
   S.threshold=clampToRange(S.threshold);
+  S.thrByDir[S.dir]=S.threshold;
   paintScaleGradient();
   // only the value scale changed, so rescale without re-matching colours
   if(S.img&&S.idxMap){
@@ -1811,8 +2011,13 @@ const fmtV=(v,d)=>v==null?"—":(+v).toFixed(d==null?2:d);
 // area/perimeter cells: cm when calibrated, otherwise whole pixels
 function sizeCells(m){
   return m.areaCM2!=null
-    ? [fmtV(m.areaCM2,3),fmtV(m.perimCM,2)]
-    : [String(m.areaPx),String(Math.round(m.perimPx))];
+    ? [fmtV(m.areaCM2,3),fmtV(m.perimCM,2),fmtV(m.burdenCM2,3)]
+    : [String(m.areaPx),String(Math.round(m.perimPx)),String(Math.round(m.burdenPx))];
+}
+// burden unit: value unit x area unit, e.g. °C·cm²
+function burdenUnit(){
+  const u=curUnit(), a=S.pxPerMM>0?"cm²":"px";
+  return u?u+"·"+a:a;
 }
 // column headings carry the units (unit text set safely, not as HTML)
 function setTableHeads(){
@@ -1822,19 +2027,24 @@ function setTableHeads(){
     if(unit){const s=document.createElement("span");s.className="u";
       s.textContent=unit;th.appendChild(s);}
   };
-  head("thMax","Max",u);head("thMean","Mean",u);
+  head("thMax","Max",u);head("thMin","Min",u);head("thMean","Mean",u);
   head("thArea","Area",cal?"cm²":"px");
   head("thPerim","Perim.",cal?"cm":"px");
+  head("thBurden","Burden",burdenUnit());
 }
 // one table row of numbers; returns the <tr> with an empty action cell
 function measureRow(m,firstCell,cls){
   const tr=document.createElement("tr");tr.className=cls;
-  const [a,p]=sizeCells(m);
+  const [a,p,bu]=sizeCells(m);
   const td0=document.createElement("td");td0.appendChild(firstCell);
   tr.appendChild(td0);
-  [fmtV(m.maxT),fmtV(m.meanT),a,p].forEach(v=>{
-    const td=document.createElement("td");td.textContent=v;tr.appendChild(td);
-  });
+  // Hot shows Max, Cold shows Min (see .les.cold)
+  [[fmtV(m.maxT),"maxcol"],[fmtV(m.minT),"mincol"],[fmtV(m.meanT)],[a],[p],[bu]]
+    .forEach(([v,cls])=>{
+      const td=document.createElement("td");td.textContent=v;
+      if(cls)td.className=cls;
+      tr.appendChild(td);
+    });
   const act=document.createElement("td");act.className="act";
   tr.appendChild(act);
   return tr;
@@ -1852,7 +2062,7 @@ function paintEmptyRow(){
   const old=list.querySelector("tr.empty");if(old)old.remove();
   if(S.rois.length||S.candidates.length)return;
   const tr=document.createElement("tr");tr.className="empty";
-  tr.innerHTML='<td colspan="6">No lesions yet. Set the threshold and press '+
+  tr.innerHTML='<td colspan="8">No lesions yet. Set the threshold and press '+
     'Detect, or draw one by hand.</td>';
   list.appendChild(tr);
 }
@@ -1863,7 +2073,7 @@ function renderCandidates(){
   if(S.candidates.length){
     // group heading with the keep-all shortcut
     const g=document.createElement("tr");g.className="grp";
-    g.innerHTML=`<td colspan="4">Detected, not kept (${S.candidates.length})</td>`+
+    g.innerHTML=`<td colspan="6">Detected, not kept (${S.candidates.length})</td>`+
       '<td colspan="2"></td>';
     g.lastChild.appendChild(mkBtn("Keep all","primary sm",()=>{
       const n=S.candidates.length;
@@ -1938,24 +2148,43 @@ function renderROIs(){
 
 /* ---- Case Summary: totals + peak (delta or absolute) value ---- */
 function updateTotals(){updateTotalsInner();updateStepSummaries();}
+// the most extreme value across kept lesions: highest max for Hot,
+// lowest min for Cold. null if no lesion has measurable pixels.
+function peakOfROIs(){
+  const cold=S.dir==="cold";
+  let peak=null;
+  S.rois.forEach(roi=>{
+    const m=getM(roi), v=cold?m.minT:m.maxT;
+    if(v!=null&&(peak==null||(cold?v<peak:v>peak)))peak=v;
+  });
+  return peak;
+}
 function updateTotalsInner(){
-  let areaPx=0,perimPx=0,peak=-Infinity;
+  let areaPx=0,perimPx=0,burdenPx=0;
   S.rois.forEach(roi=>{
     const m=getM(roi);
-    areaPx+=m.areaPx; perimPx+=m.perimPx;
-    if(m.maxT!=null && m.maxT>peak) peak=m.maxT;
+    areaPx+=m.areaPx; perimPx+=m.perimPx; burdenPx+=m.burdenPx;
   });
+  const peak=peakOfROIs()??-Infinity;
+  const cold=S.dir==="cold";
   $("csCount").textContent=S.rois.length;
+  $("csBurdenLabel").textContent="Thermal burden, "+(cold?"below ":"above ")+
+    (Math.round(S.threshold*100)/100)+uSuffix();
 
   const mod=curMod();
-  $("csDeltaLabel").textContent=mod.delta?"\u0394 max":"Peak max";
+  $("csDeltaLabel").textContent=mod.delta?(cold?"\u0394 min":"\u0394 max")
+                                          :(cold?"Lowest min":"Peak max");
 
   if(!S.rois.length){
     $("csDeltaMax").textContent="\u2014";
     $("csTotalArea").textContent="\u2014";
     $("csTotalPerim").textContent="\u2014";
+    $("csBurden").textContent="\u2014";
     return;
   }
+  $("csBurden").textContent=(S.pxPerMM>0
+    ? (burdenPx/(S.pxPerMM*S.pxPerMM)/100).toFixed(3)
+    : String(Math.round(burdenPx)))+" "+burdenUnit();
   // peak value: delta modalities show Δ + signed value, others show raw peak
   if(peak===-Infinity){
     $("csDeltaMax").textContent="—";   // no measurable pixels inside
@@ -2007,7 +2236,10 @@ function applyModality(key,opts){
   // adopt the modality's value range + default threshold
   S.tMin=mod.min; S.tMax=mod.max;
   $("tMin").value=mod.min; $("tMax").value=mod.max;
-  S.threshold=Math.min(S.tMax,Math.max(S.tMin,mod.thr));
+  // default thresholds: cold mirrors hot on delta scales (+1.5 / -1.5 °C),
+  // otherwise both start at the modality's default
+  S.thrByDir={hot:mod.thr, cold:mod.delta?-mod.thr:mod.thr};
+  S.threshold=clampToRange(S.thrByDir[S.dir]);
   // adopt the modality's default palette as the working scale
   $("palettePreset").value=mod.preset;
   S.paletteStops=PRESETS[mod.preset].slice();
@@ -2302,16 +2534,9 @@ $("exportImg").addEventListener("click",()=>{
   const c=off.getContext("2d");
   c.drawImage(S.img,0,0);
   S.rois.forEach((roi,idx)=>{
-    c.beginPath();
-    roi.pts.forEach((p,i)=>i?c.lineTo(p[0],p[1]):c.moveTo(p[0],p[1]));
-    c.closePath();
-    if(roi.fill>0){
-      const a=Math.round(Math.min(1,roi.fill)*255)
-              .toString(16).padStart(2,"0");
-      c.fillStyle=roi.color+a;c.fill();
-    }
-    c.strokeStyle=roi.color;c.lineWidth=(roi.strokeW||2.4)*1.3;
-    c.stroke();
+    getM(roi);                               // makes sure holes are current
+    drawShape(c,1,roi.pts,roi._holes,roi.color,(roi.strokeW||2.4)*1.3,
+              roi.fill>0?roi.fill:0);
     if(S.showNums){
       const ct=centroid(roi.pts);
       c.fillStyle="#fff";c.strokeStyle="rgba(0,0,0,.8)";
@@ -2329,24 +2554,31 @@ $("exportCsv").addEventListener("click",()=>{
     "area_px","area_mm2","area_cm2",
     "perimeter_px","perimeter_mm","perimeter_cm",
     "max"+uTag,"min"+uTag,"mean"+uTag,
+    "threshold"+uTag,"direction","burden_px","burden_cm2",
+    "active_area_px","active_area_cm2","holes",
     "image","tool_version"];
   // quote text cells so commas or quotes in names/units can't break columns
   const q=v=>/[",\n]/.test(String(v))?'"'+String(v).replace(/"/g,'""')+'"':v;
   const img=q(S.fileName||""), ver=APP_VERSION;
   const lines=[hdr.map(q).join(",")];
 
-  let areaPx=0,perimPx=0,peak=-Infinity;
+  let areaPx=0,perimPx=0,burdenPx=0,activePx=0,holes=0;
   S.rois.forEach((roi,i)=>{
     const m=getM(roi);
-    areaPx+=m.areaPx; perimPx+=m.perimPx;
-    if(m.maxT!=null && m.maxT>peak) peak=m.maxT;
+    areaPx+=m.areaPx; perimPx+=m.perimPx; burdenPx+=m.burdenPx;
+    activePx+=m.activePx; holes+=m.holes;
     lines.push([i+1,
       m.areaPx, m.areaMM2??"", m.areaCM2??"",
       m.perimPx, m.perimMM??"", m.perimCM??"",
-      m.maxT??"", m.minT??"", m.meanT??"", img, ver].join(","));
+      m.maxT??"", m.minT??"", m.meanT??"",
+      m.thr, m.dir, m.burdenPx, m.burdenCM2??"",
+      m.activePx, m.activeCM2??"", m.holes, img, ver].join(","));
   });
+  const cold=S.dir==="cold";
+  const peak=peakOfROIs()??-Infinity;
 
-  // ---- final SUMMARY row: Δ/peak max, total area, total perimeter ----
+  // ---- final SUMMARY row: Δ max (hot) or Δ min (cold), totals ----
+  // the peak goes in the max column for Hot and the min column for Cold
   const cal=S.pxPerMM>0;
   const totAreaMM2 = cal ? +(areaPx/(S.pxPerMM*S.pxPerMM)).toFixed(2) : "";
   const totAreaCM2 = cal ? +(areaPx/(S.pxPerMM*S.pxPerMM)/100).toFixed(3) : "";
@@ -2354,14 +2586,20 @@ $("exportCsv").addEventListener("click",()=>{
   const totPerimCM = cal ? +(perimPx/S.pxPerMM/10).toFixed(2) : "";
   const peakStr = (peak===-Infinity) ? ""
     : (mod.delta ? (peak>0?"+":"")+peak.toFixed(2) : peak.toFixed(2));
+  const totBurdenCM2 = cal ? +(burdenPx/(S.pxPerMM*S.pxPerMM)/100).toFixed(3) : "";
+  const totActiveCM2 = cal ? +(activePx/(S.pxPerMM*S.pxPerMM)/100).toFixed(3) : "";
   lines.push(["SUMMARY",
     Math.round(areaPx), totAreaMM2, totAreaCM2,
     Math.round(perimPx), totPerimMM, totPerimCM,
-    peakStr, "", "", img, ver].join(","));
+    cold?"":peakStr, cold?peakStr:"", "",
+    +S.threshold.toFixed(2), S.dir, +burdenPx.toFixed(1), totBurdenCM2,
+    activePx, totActiveCM2, holes,
+    img, ver].join(","));
 
   // UTF-8 BOM so Excel reads °, ², ₂ etc. correctly instead of mojibake
   download("data:text/csv;charset=utf-8,"+
-    encodeURIComponent("\uFEFF"+lines.join("\n")),"lesion_measurements.csv");
+    encodeURIComponent("\uFEFF"+lines.join("\n")),
+    cold?"lesion_measurements_cold.csv":"lesion_measurements.csv");
 });
 /* ---- ImageJ .roi binary writer (polygon type) ---- */
 function makeImageJRoi(pts,name){
@@ -2445,10 +2683,16 @@ function makeZip(files){
 
 $("exportZip").addEventListener("click",()=>{
   if(!S.rois.length){toast("No ROIs to export.");return;}
-  const files=S.rois.map((roi,i)=>{
+  // each lesion, followed by its holes (excluded islands) as separate ROIs
+  const files=[];
+  S.rois.forEach((roi,i)=>{
     const nm=`lesion_${String(i+1).padStart(2,"0")}`;
-    return {name:nm+".roi",
-            data:makeImageJRoi(roi.pts,nm)};
+    files.push({name:nm+".roi",data:makeImageJRoi(roi.pts,nm)});
+    getM(roi);
+    (roi._holes||[]).forEach((h,j)=>{
+      const hn=`${nm}_hole_${String(j+1).padStart(2,"0")}`;
+      files.push({name:hn+".roi",data:makeImageJRoi(h,hn)});
+    });
   });
   // a single .roi exports bare; multiple go in a RoiSet.zip
   if(files.length===1){
@@ -2500,7 +2744,7 @@ function updateStepSummaries(){
   set("sum1",S.img?S.iw+" \u00d7 "+S.ih+" px":"No image yet");
   set("sum2",$("palTag").textContent+", "+r(S.tMin)+" to "+r(S.tMax)+u);
   set("sum3",S.pxPerMM>0?S.pxPerMM.toFixed(2)+" px/mm":"Optional");
-  set("sum4","\u2265 "+r(S.threshold)+u+
+  set("sum4",(S.dir==="cold"?"Cold \u2264 ":"Hot \u2265 ")+r(S.threshold)+u+
     (S.candidates.length?", "+S.candidates.length+" found":""));
 }
 /* =====================================================================
@@ -2513,6 +2757,9 @@ function getSettings(){
     modality:S.modality,
     customName:$("customName").value, customUnit:$("customUnit").value,
     rangeMin:S.tMin, rangeMax:S.tMax, threshold:S.threshold,
+    direction:S.dir,
+    thresholds:{hot:S.dir==="hot"?S.threshold:S.thrByDir.hot,
+                cold:S.dir==="cold"?S.threshold:S.thrByDir.cold},
     smoothing:parseFloat($("smoothR").value),
     minSizePx:parseInt($("minSize").value,10),
     stickerMM:parseFloat($("calMM").value),
@@ -2547,7 +2794,17 @@ function applySettings(o){
   if(num(o.stickerMM)&&o.stickerMM>0)$("calMM").value=o.stickerMM;
   if(typeof o.showNumbers==="boolean"){
     S.showNums=o.showNumbers;$("showNums").checked=o.showNumbers;}
-  if(num(o.threshold))S.threshold=clampToRange(o.threshold);
+  // direction + each direction's threshold (older files have neither: hot)
+  const t=o.thresholds;
+  if(t&&num(t.hot))S.thrByDir.hot=t.hot;
+  if(t&&num(t.cold))S.thrByDir.cold=t.cold;
+  // (kept lesions keep the direction they were found in)
+  if((o.direction==="hot"||o.direction==="cold")&&!S.rois.length){
+    S.dir=o.direction;S.candidates=[];
+  }
+  if(num(o.threshold))S.thrByDir[S.dir]=o.threshold;
+  S.threshold=clampToRange(S.thrByDir[S.dir]);
+  applyDirUI();
   renderStops();updatePalettePreview();
   if(S.img){buildTempMap();buildHighlight();}
   applyUnitLabels();updateScaleVisual();
@@ -2590,12 +2847,23 @@ $("resetSettings").addEventListener("click",()=>{
   $("smoothR").value=2;$("smoothV").textContent="2";
   $("minSize").value=20;$("calMM").value=10;
   S.showNums=true;$("showNums").checked=true;
+  if(!S.rois.length)S.dir="hot";   // back to Hot unless lesions are kept
   applyModality("tempC");          // range, threshold, unit, Swift palette
+  applyDirUI();
   if(S.img)render();
   settingsChanged();
   toast("Settings reset to defaults.");
 });
 $("minSize").addEventListener("change",settingsChanged);
+// smoothing and min size decide which holes count, so remeasure when they change
+function remeasure(){
+  S.mVer++;
+  if(S.rois.length)renderROIs();
+  if(S.candidates.length)renderCandidates();
+  render();
+}
+$("smoothR").addEventListener("change",remeasure);
+$("minSize").addEventListener("change",remeasure);
 $("calMM").addEventListener("change",settingsChanged);
 
 /* =====================================================================
